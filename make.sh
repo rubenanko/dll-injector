@@ -5,7 +5,7 @@ set -Eeuo pipefail
 IFS=$'\n\t'
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
-build_dir="./tmp/"
+build_dir="./build/"
 
 # -------- Script utils -------- #
 setup_colors() {
@@ -46,15 +46,14 @@ step_0() {
   info "build directory created"
 }
 
-
-build(){
-x86_64-w64-mingw32-gcc src/main.c -o dll-injector.exe \
-  -nostdlib -nodefaultlibs \
-  -lkernel32 \
+build() {
+  x86_64-w64-mingw32-gcc src/main.c -o "$build_dir"/dll-injector.exe \
+    -nostdlib -nodefaultlibs \
+    -lkernel32
   # -mwindows # disable the console
 }
 
-main(){
+main() {
   step_0
   build
 }
