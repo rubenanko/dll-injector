@@ -1,5 +1,6 @@
 #ifndef PE_FORMAT_H
 #define PE_FORMAT_H
+#include <stdio.h>
 #define MINGW_INTERFACE
 #ifdef MINGW_INTERFACE
 #include <minwindef.h>
@@ -122,7 +123,12 @@ struct _IMAGE_SECTION_HEADER
     USHORT NumberOfLinenumbers;                                             //0x22
     ULONG Characteristics;                                                  //0x24
 };
-
-
 #endif // !MINGW_INTERFACE
+#define IMAGE_MAGIC 0x4D58
+typedef struct _IMAGE_PARSED {
+
+  FILE* ptr_peFile;
+  
+} IMAGE_PARSED, * PIMAGE_PARSED;
+
 #endif // !PE_FORMAT_H
