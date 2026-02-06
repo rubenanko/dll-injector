@@ -1,4 +1,4 @@
-#include "dll-injector.h"
+#include "../include/dll-injector/dll-injector.h"
 #include <string.h>
 #include <tlhelp32.h>
 #include <stdio.h>

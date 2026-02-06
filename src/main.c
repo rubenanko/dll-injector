@@ -1,5 +1,4 @@
-#include "dll-injector.h"
-#include <stdio.h>
+#include "../include/dll-injector/main.h"
 
 /* Main entry:
  * - Finds notepad.exe if present
