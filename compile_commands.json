@@ -1,0 +1,58 @@
+[
+  {
+    "file": "main.c",
+    "arguments": [
+      "x86_64-w64-mingw32-gcc",
+      "-I.",
+      "-DWIN32_LEAN_AND_MEAN",
+      "-O2",
+      "-std=c11",
+      "-Wall",
+      "-Wextra",
+      "-Wshadow",
+      "-o",
+      "build/dll-injector.exe",
+      "main.c"
+    ],
+    "directory": "/home/ryan/dev/windows-exploitation",
+    "output": "build/dll-injector.exe"
+  },
+  {
+    "file": "dll-injector.c",
+    "arguments": [
+      "x86_64-w64-mingw32-gcc",
+      "-I.",
+      "-DWIN32_LEAN_AND_MEAN",
+      "-O2",
+      "-std=c11",
+      "-Wall",
+      "-Wextra",
+      "-Wshadow",
+      "-o",
+      "build/dll-injector.exe",
+      "dll-injector.c"
+    ],
+    "directory": "/home/ryan/dev/windows-exploitation",
+    "output": "build/dll-injector.exe"
+  },
+  {
+    "file": "simple-dll.c",
+    "arguments": [
+      "x86_64-w64-mingw32-gcc",
+      "-I.",
+      "-DWIN32_LEAN_AND_MEAN",
+      "-O2",
+      "-std=c11",
+      "-Wall",
+      "-Wextra",
+      "-Wshadow",
+      "-ffunction-sections",
+      "-fdata-sections",
+      "-o",
+      "build/injected-dll.dll",
+      "simple-dll.c"
+    ],
+    "directory": "/home/ryan/dev/windows-exploitation",
+    "output": "build/injected-dll.dll"
+  }
+]
