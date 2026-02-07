@@ -1,22 +1,5 @@
 #include "../include/dll-injector/pe-parser.h"
 #include "windows/pe-format.h"
-#include <minwinbase.h>
-#include <minwindef.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <winnt.h>
-
-#define NBYTES(x) (sizeof(x))
-#define NITEMS(arr) (sizeof(arr) / sizeof((arr)[0]))
-
-static bool seek_checked(FILE *fp, long offset, long size) {
-  if (offset < 0 || offset > size) {
-    return false;
-  }
-  return fseek(fp, offset, SEEK_SET) == 0;
-}
 
 bool isValidImage(const char *fileName) {
   FILE *fp;
