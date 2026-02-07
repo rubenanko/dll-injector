@@ -1,29 +1,44 @@
 #include "../include/dll-injector/pe-parser.h"
 #include "windows/pe-format.h"
+#include <minwinbase.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <winnt.h>
 
+
+#define NBYTES(x) sizeof(x)/8
+
 bool isValidImage(const char* fileName){
-  FILE* file;
+  FILE* fp;
+  size_t retRead;
+  int retSeek;
   IMAGE_DOS_HEADER tmpImageDosHeader;
 
-  file = fopen(fileName, "rb");
-  if (file == NULL) {
+  fp = fopen(fileName, "rb");
+  if (fp == NULL) {
     return false;
   }
 
-  int fseekRC = fseek(file, 0, SEEK_SET);
-  if (fseekRC) {
+  retSeek = fseek(fp, 0, SEEK_SET);
+  if (retSeek) {
     fprintf(stderr, "Error: fseek returns %d\n", errno);
-    fclose(file);
+    fclose(fp);
     return false;
   }
 
-  int freadRC = fread(&tmpImageDosHeader, sizeof(tmpImageDosHeader), 1, file);
+  retRead = fread(&tmpImageDosHeader, sizeof(tmpImageDosHeader), 1, fp);
+  if (retRead != NBYTES(tmpImageDosHeader)) {
+    fprintf(stderr, "fread() failed: %zu\n", retRead);
+    fclose(fp);
+    return false;
+  }
+
+  // verify e_magic
+  // verify pe32+
   
-  return false;
+  return true;
 }
 
 PIMAGE_PARSED ParsePE(const char *fileName){
