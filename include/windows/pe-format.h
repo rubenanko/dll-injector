@@ -124,7 +124,13 @@ struct _IMAGE_SECTION_HEADER
     ULONG Characteristics;                                                  //0x24
 };
 #endif // !MINGW_INTERFACE
+
+// PE Files constant values
 #define IMAGE_MAGIC 0x4D58
+
+// PE Parsing constant values
+
+// PE Parsed structure
 typedef struct _IMAGE_PARSED {
 
   FILE* ptr_peFile;
