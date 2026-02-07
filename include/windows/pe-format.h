@@ -125,9 +125,6 @@ struct _IMAGE_SECTION_HEADER
 };
 #endif // !MINGW_INTERFACE
 
-// PE Files constant values
-#define IMAGE_MAGIC 0x4D58
-
 // PE Parsing constant values
 
 // PE Parsed structure
