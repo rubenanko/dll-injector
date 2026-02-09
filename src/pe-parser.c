@@ -1,5 +1,47 @@
-#include "../include/dll-injector/pe-parser.h"
-#include "windows/pe-format.h"
+#include <dll-injector/pe-parser.h>
+#include <windows/pe-format.h>
+
+bool readNt(const char *fileName, PIMAGE_NT_HEADERS64 header)
+{
+  FILE *fp;
+  DWORD PEHeaderOffset; 
+  long fileSize;
+
+  // opening the file
+  fp = fopen(fileName, "rb");
+
+  if (fp == NULL)
+    return false;
+
+  // checking the size of the file
+  // seek the end
+  if (fseek(fp, 0, SEEK_END) != 0) {
+    perror("fseek");
+    fclose(fp);
+    return false;
+  }
+
+  // calculate the size
+  fileSize = ftell(fp);
+  if (fileSize < 0) {
+    perror("ftell");
+    fclose(fp);
+    return false;
+  }
+
+  if(fileSize <= 0x40)
+    return false;
+
+  // retrieving the offset of the PE Header
+  fseek(fp,0x3c,SEEK_SET);
+  fread(&PEHeaderOffset,4,1,fp);
+
+  // retrieving the Nt Header
+  fseek(fp,PEHeaderOffset,SEEK_SET);
+  fread(header,sizeof(IMAGE_NT_HEADERS64),1,fp);
+
+  return true;
+}
 
 bool isValidImage(const char *fileName) {
   FILE *fp;

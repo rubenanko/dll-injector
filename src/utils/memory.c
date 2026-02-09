@@ -1,4 +1,4 @@
-#include "../include/utils/memory.h"
+#include <utils/memory.h>
 
 HANDLE open_process_from_name(char * processName)
 {

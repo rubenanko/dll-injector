@@ -98,7 +98,7 @@ struct _IMAGE_NT_HEADERS64
     ULONG Signature;                                                        //0x0
     struct _IMAGE_FILE_HEADER FileHeader;                                   //0x4
     struct _IMAGE_OPTIONAL_HEADER64 OptionalHeader;                         //0x18
-};
+} IMAGE_NT_HEADERS64, *PIMAGE_NT_HEADERS64; 
 
 // The following structures will might be to add : 
 // IMAGE_IMPORT_DESCRIPTOR
