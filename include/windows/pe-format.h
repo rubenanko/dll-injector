@@ -125,6 +125,16 @@ struct _IMAGE_SECTION_HEADER
 };
 #endif // !MINGW_INTERFACE
 
+typedef struct _IMAGE_PE_FILE
+{
+    IMAGE_DOS_HEADER DosHeader;
+    ULONG SizeOfStub;
+    ULONG PointerToDosStub;
+    IMAGE_NT_HEADERS64 NtHeader;
+    ULONG PointerToRawData;    
+} IMAGE_PE_FILE, *PIMAGE_PE_FILE;
+
+
 // PE Parsing constant values
 
 // PE Parsed structure

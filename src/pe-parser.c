@@ -1,7 +1,7 @@
 #include <dll-injector/pe-parser.h>
 #include <windows/pe-format.h>
 
-bool readNt(const char *fileName, PIMAGE_NT_HEADERS64 header)
+long readPE(const char *fileName, PIMAGE_PE_FILE pe)
 {
   FILE *fp;
   DWORD PEHeaderOffset; 
@@ -21,7 +21,7 @@ bool readNt(const char *fileName, PIMAGE_NT_HEADERS64 header)
     return false;
   }
 
-  // calculate the size
+  // calculating the size
   fileSize = ftell(fp);
   if (fileSize < 0) {
     perror("ftell");
@@ -29,12 +29,19 @@ bool readNt(const char *fileName, PIMAGE_NT_HEADERS64 header)
     return false;
   }
 
+  // actual check
   if(fileSize <= 0x40)
+  {
+    printf("Error : The file %s is too small to be a PE file.",filename);
     return false;
+  }
 
-  // retrieving the offset of the PE Header
-  fseek(fp,0x3c,SEEK_SET);
-  fread(&PEHeaderOffset,4,1,fp);
+  fseek(fp,0,SEEK_SET);
+  fread(pe,sizeof(IMAGE_DOS_HEADER),1,fp);
+
+  // // retrieving the offset of the PE Header
+  // fseek(fp,0x3c,SEEK_SET);
+  // fread(&PEHeaderOffset,4,1,fp);
 
   // retrieving the Nt Header
   fseek(fp,PEHeaderOffset,SEEK_SET);

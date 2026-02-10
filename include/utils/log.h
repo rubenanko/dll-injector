@@ -4,6 +4,6 @@
 #include <stdio.h>
 
 // this function displays the input buffer in stdin in a classic hexdump format
-void hexdump(unsigned char * buffer,int bufferSize);
+void hexdump(void * buffer,int bufferSize);
 
 #endif

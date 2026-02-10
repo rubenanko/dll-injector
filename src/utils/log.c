@@ -1,10 +1,11 @@
 #include <utils/log.h>
 
-void hexdump(unsigned char * buffer,int bufferSize)
+void hexdump(void * buffer,int bufferSize)
 {
+    unsigned char * casted_buffer = buffer;
     for(int i=0;i < bufferSize;i++)
     {
-        printf("0x%02x ",*(buffer++));
+        printf("0x%02x ",*(casted_buffer++));
 
         // newline every 16 bytes
         if(((i + 1) % 16) == 0)

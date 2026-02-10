@@ -14,7 +14,7 @@
 #include <utils/stdio-sec.h>
 
 
-bool readNt(const char * filename, PIMAGE_NT_HEADERS64 header);
+long readPE(const char * filename,PIMAGE_PE_FILE pe);
 
 bool isValidImage(const char* fileName);
 
