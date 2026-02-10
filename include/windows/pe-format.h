@@ -13,6 +13,7 @@ typedef long LONG;
 typedef unsigned long ULONG;
 typedef long long LONGLONG;
 typedef unsigned long long ULONGLONG;
+typedef void * PVOID;
 
 //0x40 bytes (sizeof)
 struct _IMAGE_DOS_HEADER
@@ -36,7 +37,7 @@ struct _IMAGE_DOS_HEADER
     USHORT e_oeminfo;                                                       //0x26
     USHORT e_res2[10];                                                      //0x28
     LONG e_lfanew;                                                          //0x3c
-};
+} IMAGE_DOS_HEADER, *PIMAGE_DOS_HEADER;
 
 //0x8 bytes (sizeof)
 struct _IMAGE_DATA_DIRECTORY
@@ -78,7 +79,7 @@ struct _IMAGE_OPTIONAL_HEADER64
     ULONG LoaderFlags;                                                      //0x68
     ULONG NumberOfRvaAndSizes;                                              //0x6c
     struct _IMAGE_DATA_DIRECTORY DataDirectory[16];                         //0x70
-};
+} IMAGE_OPTIONAL_HEADER32, *PIMAGE_OPTIONAL_HEADER32;
 
 //0x14 bytes (sizeof)
 struct _IMAGE_FILE_HEADER
@@ -128,10 +129,10 @@ struct _IMAGE_SECTION_HEADER
 typedef struct _IMAGE_PE_FILE
 {
     IMAGE_DOS_HEADER DosHeader;
-    ULONG SizeOfStub;
-    ULONG PointerToDosStub;
+    ULONG SizeOfDosStub;
+    PVOID PointerToDosStub;
     IMAGE_NT_HEADERS64 NtHeader;
-    ULONG PointerToRawData;    
+    PVOID PointerToRawData;    
 } IMAGE_PE_FILE, *PIMAGE_PE_FILE;
 
 
@@ -143,5 +144,7 @@ typedef struct _IMAGE_PARSED {
   FILE* ptr_peFile;
   
 } IMAGE_PARSED, * PIMAGE_PARSED;
+
+#define PE_FILE_MINIMUM_SIZE sizeof(IMAGE_NT_HEADERS64) + sizeof(IMAGE_DOS_HEADER)
 
 #endif // !PE_FORMAT_H

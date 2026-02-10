@@ -14,7 +14,7 @@
 #include <utils/stdio-sec.h>
 
 
-long readPE(const char * filename,PIMAGE_PE_FILE pe);
+long readPE(const char * fileName,PIMAGE_PE_FILE pe);
 
 bool isValidImage(const char* fileName);
 
