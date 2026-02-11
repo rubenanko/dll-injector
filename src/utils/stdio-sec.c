@@ -1,4 +1,4 @@
-#include "../include/utils/stdio-sec.h"
+#include <utils/stdio-sec.h>
 
 bool seek_checked(FILE *fp, long offset, long size) {
   if (offset < 0 || offset > size) {

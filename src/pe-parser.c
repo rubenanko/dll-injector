@@ -1,5 +1,60 @@
-#include "../include/dll-injector/pe-parser.h"
-#include "windows/pe-format.h"
+#include <dll-injector/pe-parser.h>
+
+long readPE(const char *fileName, PIMAGE_PE_FILE pe)
+{
+  FILE *fp;
+  long fileSize;
+  long rawDataSize;
+
+  // opening the file
+  fp = fopen(fileName, "rb");
+
+  if (fp == NULL)
+    return -1;
+
+  // checking the size of the file
+  // seek the end
+  if (fseek(fp, 0, SEEK_END) != 0) {
+    perror("fseek");
+    fclose(fp);
+    return -1;
+  }
+
+  // calculating the size
+  fileSize = ftell(fp);
+  if (fileSize < 0) {
+    perror("ftell");
+    fclose(fp);
+    return -1;
+  }
+
+  // actual check
+  if(fileSize <= PE_FILE_MINIMUM_SIZE)
+  {
+    printf("Error : The file %s is too small to be a PE file.",fileName);
+    return -1;
+  }
+
+  fseek(fp,0,SEEK_SET);
+  fread(pe,sizeof(IMAGE_DOS_HEADER),1,fp);
+
+  // calculating the dos stub size and allocate the stub space
+  pe->SizeOfDosStub = pe->DosHeader.e_lfanew - 0x40;
+  pe->PointerToDosStub = malloc(pe->SizeOfDosStub);
+
+  //read the dos stub from file
+  fread(pe->PointerToDosStub,pe->SizeOfDosStub,1,fp);
+
+  //read the Nt Headers
+  fread(&pe->NtHeader,sizeof(IMAGE_NT_HEADERS64),1,fp);
+
+  // read the rest of the file
+  rawDataSize = fileSize - PE_FILE_MINIMUM_SIZE - pe->SizeOfDosStub; // calculating the size of the remaining data
+  pe->PointerToRawData = malloc(rawDataSize); // allocating
+  fread(pe->PointerToRawData,rawDataSize,1,fp); // reading
+
+  return fileSize;
+}
 
 bool isValidImage(const char *fileName) {
   FILE *fp;

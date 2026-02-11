@@ -1,5 +1,5 @@
 // x86_64-w64-mingw32-gcc -shared -O2 -o injected-dll.dll simple-dll.c -I. -Wl,--out-implib,libsimple.a -Wl,--output-def,simple.def -luser32 -lshell32 -lgdi32
-#include "../include/dll-injector/simple-dll.h"
+#include <dll-injector/simple-dll.h>
 
 int g_sleepTime = SLEEPTIME;
 int* g_sleepTime_addr = (PVOID)&g_sleepTime;
