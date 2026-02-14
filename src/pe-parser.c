@@ -1,4 +1,5 @@
 #include <dll-injector/pe-parser.h>
+#include <winnt.h>
 
 /**
  * readPE - reads a PE file and fills the provided IMAGE_PE_FILE structure
@@ -172,15 +173,15 @@ PVOID rvatopointer(PIMAGE_PE_FILE pe, DWORD rva) {
     int i;
     int numberOfSections = pe->NtHeader.FileHeader.NumberOfSections;
     
-    pimage_section_header sectionHeader = (pimage_section_header)pe->PointerToRawData;
+    PIMAGE_SECTION_HEADER  sectionHeader = (PIMAGE_SECTION_HEADER)pe->PointerToRawData  ;
 
     for (i = 0; i < numberOfSections; i++) {
         if (rva >= sectionHeader->VirtualAddress && 
             rva < sectionHeader->VirtualAddress + sectionHeader->Misc.VirtualSize) {
             
-            dword fileOffset = sectionHeader->PointerToRawData + (rva - sectionHeader->VirtualAddress);
+            DWORD fileOffset = sectionHeader->PointerToRawData + (rva - sectionHeader->VirtualAddress);
             
-            return (pvoid)((byte*)pe->PointerToRawData + (fileOffset - pe->OffsetToRawData));
+            return (PVOID)((BYTE*)pe->PointerToRawData + (fileOffset - pe->OffsetToRawData));
         }
         sectionHeader++;
     }
