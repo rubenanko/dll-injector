@@ -1,5 +1,14 @@
 #include <dll-injector/pe-parser.h>
+#include <winnt.h>
 
+/**
+ * readPE - reads a PE file and fills the provided IMAGE_PE_FILE structure
+ *
+ * @fileName: the name of the PE file to read
+ * @pe: pointer to an IMAGE_PE_FILE structure to fill with the file's contents
+ *
+ * Returns the size of the file if successful, -1 otherwise
+ */
 long readPE(const char *fileName, PIMAGE_PE_FILE pe)
 {
   FILE *fp;
@@ -29,7 +38,7 @@ long readPE(const char *fileName, PIMAGE_PE_FILE pe)
   }
 
   // actual check
-  if(fileSize <= PE_FILE_MINIMUM_SIZE)
+  if((unsigned long long)fileSize <= PE_FILE_MINIMUM_SIZE)
   {
     printf("Error : The file %s is too small to be a PE file.",fileName);
     return -1;
@@ -52,10 +61,19 @@ long readPE(const char *fileName, PIMAGE_PE_FILE pe)
   rawDataSize = fileSize - PE_FILE_MINIMUM_SIZE - pe->SizeOfDosStub; // calculating the size of the remaining data
   pe->PointerToRawData = malloc(rawDataSize); // allocating
   fread(pe->PointerToRawData,rawDataSize,1,fp); // reading
+  
+  pe->OffsetToRawData = sizeof(IMAGE_DOS_HEADER) + pe->SizeOfDosStub + sizeof(IMAGE_NT_HEADERS64); // calculating the offset to raw data
 
   return fileSize;
 }
 
+/**
+ * isValidImage - checks if the given file is a valid PE32+ image
+ *
+ * @fileName: the name of the file to check
+ *
+ * Returns true if the file is a valid PE32+ image, false otherwise
+ */
 bool isValidImage(const char *fileName) {
   FILE *fp;
   size_t retRead;
@@ -143,11 +161,30 @@ bool isValidImage(const char *fileName) {
   return true;
 }
 
-PIMAGE_PARSED ParsePE(const char *fileName) {
-  PIMAGE_PARSED imageParsed = (PIMAGE_PARSED)malloc(sizeof(IMAGE_PARSED));
+/**
+ * rvatopointer - converts a Relative Virtual Address (RVA) to a file pointer
+ *
+ * @pe: pointer to the IMAGE_PE_FILE structure representing the PE file
+ * @rva: the Relative Virtual Address to convert
+ *
+ * Returns a pointer to the corresponding location in the file, or NULL if the RVA is invalid
+ */
+PVOID rvatopointer(PIMAGE_PE_FILE pe, DWORD rva) {
+    int i;
+    int numberOfSections = pe->NtHeader.FileHeader.NumberOfSections;
+    
+    PIMAGE_SECTION_HEADER  sectionHeader = (PIMAGE_SECTION_HEADER)pe->PointerToRawData  ;
 
-  if (isValidImage(fileName)) {
-  }
-
-  return imageParsed;
+    for (i = 0; i < numberOfSections; i++) {
+        if (rva >= sectionHeader->VirtualAddress && 
+            rva < sectionHeader->VirtualAddress + sectionHeader->Misc.VirtualSize) {
+            
+            DWORD fileOffset = sectionHeader->PointerToRawData + (rva - sectionHeader->VirtualAddress);
+            
+            return (PVOID)((BYTE*)pe->PointerToRawData + (fileOffset - pe->OffsetToRawData));
+        }
+        sectionHeader++;
+    }
+    return NULL;
 }
+

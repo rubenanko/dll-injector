@@ -13,11 +13,8 @@
 #include <utils/macros.h>
 #include <utils/stdio-sec.h>
 
-
 long readPE(const char * fileName,PIMAGE_PE_FILE pe);
-
 bool isValidImage(const char* fileName);
-
-PIMAGE_PARSED ParsePE(const char* fileName);
+PVOID rvatopointer(PIMAGE_PE_FILE pe, DWORD rva);
 
 #endif // !PE_PARSER_H

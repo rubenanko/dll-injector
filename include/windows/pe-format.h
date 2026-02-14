@@ -133,17 +133,8 @@ typedef struct _IMAGE_PE_FILE
     PVOID PointerToDosStub;
     IMAGE_NT_HEADERS64 NtHeader;
     PVOID PointerToRawData;    
+    ULONG OffsetToRawData;
 } IMAGE_PE_FILE, *PIMAGE_PE_FILE;
-
-
-// PE Parsing constant values
-
-// PE Parsed structure
-typedef struct _IMAGE_PARSED {
-
-  FILE* ptr_peFile;
-  
-} IMAGE_PARSED, * PIMAGE_PARSED;
 
 #define PE_FILE_MINIMUM_SIZE sizeof(IMAGE_NT_HEADERS64) + sizeof(IMAGE_DOS_HEADER)
 
