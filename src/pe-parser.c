@@ -1,80 +1,36 @@
 #include <dll-injector/pe-parser.h>
 #include <winnt.h>
 
-/**
- * readPE - reads a PE file and fills the provided IMAGE_PE_FILE structure
- *
- * @fileName: the name of the PE file to read
- * @pe: pointer to an IMAGE_PE_FILE structure to fill with the file's contents
- *
- * Returns the size of the file if successful, -1 otherwise
- */
-long readPE(const char *fileName, PIMAGE_PE_FILE pe)
+int SetRawData(const char *fileName, PIMAGE_PE_FILE pe)
 {
   FILE *fp;
   long fileSize;
-  long rawDataSize;
 
-  // opening the file
+  if (IsValidImage(fileName) == false) {
+    return -1;
+  }
+
   fp = fopen(fileName, "rb");
-
-  if (fp == NULL)
-    return -1;
-
-  // checking the size of the file
-  // seek the end
-  if (fseek(fp, 0, SEEK_END) != 0) {
-    perror("fseek");
-    fclose(fp);
-    return -1;
-  }
-
-  // calculating the size
+  fseek(fp, 0, SEEK_END);
   fileSize = ftell(fp);
-  if (fileSize < 0) {
-    perror("ftell");
-    fclose(fp);
-    return -1;
-  }
-
-  // actual check
-  if((unsigned long long)fileSize <= PE_FILE_MINIMUM_SIZE)
-  {
-    printf("Error : The file %s is too small to be a PE file.",fileName);
-    return -1;
-  }
+  pe->RawData = malloc(fileSize);
+  pe->SizeOfFile = fileSize;
 
   fseek(fp,0,SEEK_SET);
-  fread(pe,sizeof(IMAGE_DOS_HEADER),1,fp);
+  fread(pe->RawData, fileSize,1,fp);
 
-  // calculating the dos stub size and allocate the stub space
-  pe->SizeOfDosStub = pe->DosHeader.e_lfanew - 0x40;
-  pe->PointerToDosStub = malloc(pe->SizeOfDosStub);
-
-  //read the dos stub from file
-  fread(pe->PointerToDosStub,pe->SizeOfDosStub,1,fp);
-
-  //read the Nt Headers
-  fread(&pe->NtHeader,sizeof(IMAGE_NT_HEADERS64),1,fp);
-
-  // read the rest of the file
-  rawDataSize = fileSize - PE_FILE_MINIMUM_SIZE - pe->SizeOfDosStub; // calculating the size of the remaining data
-  pe->PointerToRawData = malloc(rawDataSize); // allocating
-  fread(pe->PointerToRawData,rawDataSize,1,fp); // reading
-  
-  pe->OffsetToRawData = sizeof(IMAGE_DOS_HEADER) + pe->SizeOfDosStub + sizeof(IMAGE_NT_HEADERS64); // calculating the offset to raw data
-
-  return fileSize;
+  fclose(fp);
+  return 0;
 }
 
 /**
- * isValidImage - checks if the given file is a valid PE32+ image
+ * IsValidImage - checks if the given file is a valid PE32+ image
  *
  * @fileName: the name of the file to check
  *
  * Returns true if the file is a valid PE32+ image, false otherwise
  */
-bool isValidImage(const char *fileName) {
+bool IsValidImage(const char *fileName) {
   FILE *fp;
   size_t retRead;
   IMAGE_DOS_HEADER tmpImageDosHeader;
@@ -162,29 +118,32 @@ bool isValidImage(const char *fileName) {
 }
 
 /**
- * rvatopointer - converts a Relative Virtual Address (RVA) to a file pointer
+ * RvaToPtr - converts a Relative Virtual Address (RVA) to a file pointer
  *
  * @pe: pointer to the IMAGE_PE_FILE structure representing the PE file
  * @rva: the Relative Virtual Address to convert
  *
  * Returns a pointer to the corresponding location in the file, or NULL if the RVA is invalid
  */
-PVOID rvatopointer(PIMAGE_PE_FILE pe, DWORD rva) {
-    int i;
-    int numberOfSections = pe->NtHeader.FileHeader.NumberOfSections;
-    
-    PIMAGE_SECTION_HEADER  sectionHeader = (PIMAGE_SECTION_HEADER)pe->PointerToRawData  ;
+PVOID RvaToPtr(PIMAGE_PE_FILE pe, DWORD rva) {
+  int i;
+  PIMAGE_DOS_HEADER dosHeader = (PIMAGE_DOS_HEADER)pe->RawData;
+  PIMAGE_NT_HEADERS64 NtHeader = (PIMAGE_NT_HEADERS64)((BYTE*)pe->RawData + dosHeader->e_lfanew);
 
-    for (i = 0; i < numberOfSections; i++) {
-        if (rva >= sectionHeader->VirtualAddress && 
-            rva < sectionHeader->VirtualAddress + sectionHeader->Misc.VirtualSize) {
-            
-            DWORD fileOffset = sectionHeader->PointerToRawData + (rva - sectionHeader->VirtualAddress);
-            
-            return (PVOID)((BYTE*)pe->PointerToRawData + (fileOffset - pe->OffsetToRawData));
-        }
-        sectionHeader++;
-    }
-    return NULL;
+  int numberOfSections = NtHeader->FileHeader.NumberOfSections;
+    
+  PIMAGE_SECTION_HEADER  sectionHeader = (PIMAGE_SECTION_HEADER)(NtHeader + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER) + NtHeader->FileHeader.SizeOfOptionalHeader);
+
+  for (i = 0; i < numberOfSections; i++) {
+      if (rva >= sectionHeader->VirtualAddress && 
+          rva < sectionHeader->VirtualAddress + sectionHeader->Misc.VirtualSize) {
+          
+          DWORD fileOffset = sectionHeader->PointerToRawData + (rva - sectionHeader->VirtualAddress);
+          
+          return (PVOID)((BYTE*)pe + fileOffset );
+      }
+      sectionHeader ++;
+  }
+  return NULL;
 }
 

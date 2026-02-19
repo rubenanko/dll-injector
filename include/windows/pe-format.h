@@ -128,12 +128,9 @@ struct _IMAGE_SECTION_HEADER
 
 typedef struct _IMAGE_PE_FILE
 {
-    IMAGE_DOS_HEADER DosHeader;
-    ULONG SizeOfDosStub;
-    PVOID PointerToDosStub;
-    IMAGE_NT_HEADERS64 NtHeader;
-    PVOID PointerToRawData;    
-    ULONG OffsetToRawData;
+  PVOID RawData;
+  ULONG SizeOfFile;
+
 } IMAGE_PE_FILE, *PIMAGE_PE_FILE;
 
 #define PE_FILE_MINIMUM_SIZE sizeof(IMAGE_NT_HEADERS64) + sizeof(IMAGE_DOS_HEADER)

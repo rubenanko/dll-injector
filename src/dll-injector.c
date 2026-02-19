@@ -30,11 +30,10 @@ static void printError(const TCHAR* msg){
 *     - Compare name  of the executable file for the process : szExeFile
 *   - Get th32ProcessID
 * - OpenProcess sur le PID visé
-* - VirtualAllowEx pour la chaîne du chemin
-* - WriteProcessMemory pour copier le chemin
-* - Récupérer l'adresse de LoadLibraryA dans kernel32.dll
-* - CreateRemoteThread(..., addressOfLoadLin, addressOfString,...)
-*/
+* - Allouer l'espace mémoire virtuel pour la DLL
+* - Mapper la DLL dans l'espace mémoire du processus cible
+* - Exécuter le stub
+* */
 
 DWORD ProcessWalking(char* exeFileName){
   HANDLE hProcessSnap;
@@ -74,33 +73,16 @@ DWORD ProcessWalking(char* exeFileName){
   return 0;
 }
 
-// 
-// - OpenProcess sur le PID visé
-// - VirtualAllowEx pour la chaîne du chemin
-// - WriteProcessMemory pour copier le chemin
-
-HANDLE injectDllPath(DWORD dwProcessId, const char* dllPath, LPVOID* remoteBuffer){
+HANDLE injectDll(DWORD dwProcessId, const char* dllPath, LPVOID* remoteBuffer){
   HANDLE hProcess;
   LPVOID pRemoteBuffer;
-  SIZE_T pathSize;
 
   hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, dwProcessId);
   if(hProcess == NULL){
     return NULL;
   }
 
-  pathSize = strlen(dllPath) + 1;
-  pRemoteBuffer = VirtualAllocEx(hProcess, NULL, pathSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-  if(pRemoteBuffer == NULL){
-    CloseHandle(hProcess);
-    return NULL;
-  }
-
-  if(!WriteProcessMemory(hProcess, pRemoteBuffer, dllPath, pathSize, NULL)){
-    VirtualFreeEx(hProcess, pRemoteBuffer, 0, MEM_RELEASE);
-    CloseHandle(hProcess);
-    return NULL;
-  }
+  // TODO : Map the DLL into the target process's memory space instead of just writing the path.
 
   if(remoteBuffer != NULL){
     *remoteBuffer = pRemoteBuffer;
