@@ -1,8 +1,4 @@
-#include <dll-injector/dll-injector.h>
-#include <string.h>
-#include <tlhelp32.h>
-#include <stdio.h>
-#include <tchar.h>
+#include "dll-injector/dll-injector.h"
 
 static void printError(const TCHAR* msg){
   DWORD errCode;
@@ -73,22 +69,69 @@ DWORD ProcessWalking(char* exeFileName){
   return 0;
 }
 
-HANDLE injectDll(DWORD dwProcessId, const char* dllPath, LPVOID* remoteBuffer){
-  HANDLE hProcess;
+LPVOID MannualMappingDll(HANDLE hProcess, PIMAGE_PE_FILE pe){
+  IMAGE_DOS_HEADER* dosHeader;
+  IMAGE_NT_HEADERS* ntHeaders;
   LPVOID pRemoteBuffer;
+  int numberOfSections;
+  IMAGE_SECTION_HEADER* sectionHeaders;
 
-  hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, dwProcessId);
-  if(hProcess == NULL){
+  // 0. Parse the PE file to get the necessary information for mapping
+  dosHeader = (IMAGE_DOS_HEADER*)pe->RawData;
+  ntHeaders = (IMAGE_NT_HEADERS*)(pe->RawData + dosHeader->e_lfanew);
+  
+  // 1. Allocate memory in the target process for the DLL
+  pRemoteBuffer = VirtualAllocEx(
+    hProcess,
+    NULL,
+    ntHeaders->OptionalHeader.SizeOfImage,
+    MEM_COMMIT | MEM_RESERVE,
+    PAGE_EXECUTE_READWRITE
+  );
+  if(pRemoteBuffer == NULL){
+    printError(TEXT("VirtualAllocEx"));
     return NULL;
   }
 
-  // TODO : Map the DLL into the target process's memory space instead of just writing the path.
+  // 2. Write the DLL's headers and sections into the allocated memory
+  WriteProcessMemory(hProcess, pRemoteBuffer, pe->RawData, ntHeaders->OptionalHeader.SizeOfHeaders, NULL);
 
-  if(remoteBuffer != NULL){
-    *remoteBuffer = pRemoteBuffer;
+  numberOfSections = ntHeaders->FileHeader.NumberOfSections;
+  sectionHeaders = IMAGE_FIRST_SECTION(ntHeaders);
+  
+  for(int i = 0; i < numberOfSections; i++){
+    WriteProcessMemory(
+      hProcess,
+      (LPVOID)((DWORD_PTR)pRemoteBuffer + sectionHeaders[i].VirtualAddress),
+      pe->RawData + sectionHeaders[i].PointerToRawData,
+      sectionHeaders[i].SizeOfRawData,
+      NULL
+    );
   }
 
-  /* Caller owns hProcess and remote buffer, and should CloseHandle/VirtualFreeEx. */
+  return pRemoteBuffer;
+}
+
+HANDLE injectDll(DWORD dwProcessId, const char* dllPath, LPVOID* remoteBuffer){
+  HANDLE hProcess;
+  LPVOID pRemoteBuffer;
+  PIMAGE_PE_FILE pe;
+  PMANUAL_MAPPING_DATA pData;
+
+  hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, dwProcessId);
+
+  pe = malloc(sizeof(IMAGE_PE_FILE));
+  SetRawData(dllPath, pe);
+  
+  pRemoteBuffer = MannualMappingDll(hProcess, pe);
+  if(pRemoteBuffer == NULL){
+    CloseHandle(hProcess);
+    return NULL;
+  }
+
+  pData = (PMANUAL_MAPPING_DATA)malloc(sizeof(MANUAL_MAPPING_DATA));
+  pData->pBaseAddress = pRemoteBuffer;
+
   return hProcess;
 }
 
