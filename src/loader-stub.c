@@ -1,4 +1,4 @@
-#include "loader-stub.h"
+#include "dll-injector/loader-stub.h"
 
 DWORD WINAPI C_LoaderStub(PMANUAL_MAPPING_DATA pData) {
 
@@ -120,3 +120,5 @@ DWORD WINAPI C_LoaderStub(PMANUAL_MAPPING_DATA pData) {
 
   return 0;
 }
+
+void C_LoaderStub_End(void) {}
