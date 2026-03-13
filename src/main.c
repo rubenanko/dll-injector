@@ -7,7 +7,6 @@
 int main(int argc, char** argv){
   DWORD targetPid;
   HANDLE hProcess;
-  HANDLE hThread;
   LPVOID remoteBuffer;
 
   if(argc < 2){
@@ -22,22 +21,12 @@ int main(int argc, char** argv){
   }
 
   remoteBuffer = NULL;
-  hProcess = injectDllPath(targetPid, argv[1], &remoteBuffer);
-  if(hProcess == NULL || remoteBuffer == NULL){
-    printf("Failed to inject DLL path.\\n");
+  hProcess = injectDll(targetPid, argv[1], &remoteBuffer);
+  if(hProcess == NULL){
+    printf("Failed to inject DLL.\\n");
     return 1;
   }
 
-  hThread = startDllSubProcess(hProcess, remoteBuffer);
-  if(hThread == NULL){
-    VirtualFreeEx(hProcess, remoteBuffer, 0, MEM_RELEASE);
-    CloseHandle(hProcess);
-    printf("Failed to start remote thread.\\n");
-    return 1;
-  }
-
-  CloseHandle(hThread);
-  VirtualFreeEx(hProcess, remoteBuffer, 0, MEM_RELEASE);
   CloseHandle(hProcess);
   return 0;
 }

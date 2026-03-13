@@ -19,8 +19,8 @@ else
 endif
 
 # ---- Common flags ----
-CPPFLAGS := -I$(INC_DIR) -DWIN32_LEAN_AND_MEAN
-CFLAGS   := $(OPT) -std=c11 -Wall -Wextra -Wshadow
+CPPFLAGS := -I$(INC_DIR) -I$(BD) -DWIN32_LEAN_AND_MEAN
+CFLAGS   := $(OPT) -std=c11 -Wall -Wextra -Wshadow -fno-stack-protector
 LDFLAGS  :=
 
 # ---- Targets ----
@@ -28,7 +28,7 @@ EXE := dll-injector
 DLL := injected-dll
 
 # ---- Sources mapping ----
-dll-injector_SRC := $(SRC_DIR)/main.c $(SRC_DIR)/dll-injector.c
+dll-injector_SRC := $(SRC_DIR)/main.c $(SRC_DIR)/dll-injector.c $(SRC_DIR)/pe-parser.c $(SRC_DIR)/loader-stub.c $(SRC_DIR)/utils/stdio-sec.c
 dll-injector_LIB :=
 
 injected-dll_SRC := $(SRC_DIR)/simple-dll.c
@@ -37,6 +37,8 @@ injected-dll_LIB := -luser32 -lshell32 -lgdi32
 # ---- Derived paths ----
 EXE_OUT := $(BD)/$(EXE).exe
 DLL_OUT := $(BD)/$(DLL).dll
+ASM_BIN := $(BD)/asm-stub.bin
+ASM_HDR := $(BD)/asm-stub-bin.h
 
 .PHONY: all clean copy ccdb debug release
 all: $(EXE_OUT) $(DLL_OUT)
@@ -52,6 +54,16 @@ $(BD):
 
 .SECONDEXPANSION:
 
+$(ASM_BIN): $(SRC_DIR)/asm-stub.nasm | $(BD)
+	nasm -f bin $< -o $@
+
+# Generate a C header embedding the raw ASM stub binary
+$(ASM_HDR): $(ASM_BIN)
+	cd $(BD) && xxd -i asm-stub.bin > asm-stub-bin.h
+
+# dll-injector.exe depends on the generated header (order-only: not passed to gcc)
+$(BD)/dll-injector.exe: | $(ASM_HDR)
+
 $(BD)/%.exe: $$($$*_SRC) | $(BD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $^ $(LDFLAGS) $($*_LIB)
 
@@ -63,7 +75,9 @@ $(BD)/%.dll: $$($$*_SRC) | $(BD)
 	  -Wl,--output-def,$(BD)/$*.def
 
 copy: all
-	@cp -f $(EXE_OUT) $(DLL_OUT) $(SHARE)/ 2>/dev/null || true
+	@mkdir -p $(SHARE)
+	@cp -f $(EXE_OUT) $(DLL_OUT) $(SHARE)/
+	@echo "Copied to $(SHARE)"
 
 clean:
 	@rm -rf $(BD) compile_commands.json
