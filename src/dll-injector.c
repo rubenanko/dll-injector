@@ -128,6 +128,11 @@ HANDLE injectDll(DWORD dwProcessId, const char* dllPath, LPVOID* remoteBuffer){
     CloseHandle(hProcess);
     return NULL;
   }
+  /*
+   * On en est là, il faut augmenter la taille de l'espace réserver 
+   * pour rajouter le shellcode PIC et le stub C compilé en PIC (C_Loader_stub)
+   *
+   */
 
   pData = (PMANUAL_MAPPING_DATA)malloc(sizeof(MANUAL_MAPPING_DATA));
   pData->pBaseAddress = pRemoteBuffer;
