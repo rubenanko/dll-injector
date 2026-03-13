@@ -175,3 +175,57 @@ HANDLE startDllSubProcess(HANDLE hProcess, LPVOID remoteBuffer){
   /* Caller should CloseHandle(hThread) after use. */
   return hThread;
 }
+
+HANDLE injectManualMappingStub(HANDLE hProcess, PMANUAL_MAPPING_DATA pData, LPVOID pAsmStub, DWORD asmStubSize, LPVOID pCStub, DWORD cStubSize) {
+    LPVOID pRemoteMem = NULL;
+    LPVOID pRemoteAsmStub = NULL;
+    LPVOID pRemoteCStub = NULL;
+    LPVOID pRemoteData = NULL;
+    HANDLE hThread = NULL;
+    SIZE_T totalSize = asmStubSize + cStubSize + sizeof(MANUAL_MAPPING_DATA);
+
+    // 1. Allouer la mémoire pour le stub ASM, le stub C et la structure de données
+    pRemoteMem = VirtualAllocEx(hProcess, NULL, totalSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (pRemoteMem == NULL) {
+        printError(TEXT("VirtualAllocEx for stubs"));
+        return NULL;
+    }
+
+    pRemoteAsmStub = pRemoteMem;
+    pRemoteCStub = (LPVOID)((BYTE*)pRemoteAsmStub + asmStubSize);
+    pRemoteData = (LPVOID)((BYTE*)pRemoteCStub + cStubSize);
+
+    // Mettre à jour l'adresse du stub C dans la structure de données
+    pData->pCStubAddress = pRemoteCStub;
+
+    // 2. Écrire le stub ASM
+    if (!WriteProcessMemory(hProcess, pRemoteAsmStub, pAsmStub, asmStubSize, NULL)) {
+        printError(TEXT("WriteProcessMemory ASM stub"));
+        goto cleanup;
+    }
+
+    // 3. Écrire le stub C
+    if (!WriteProcessMemory(hProcess, pRemoteCStub, pCStub, cStubSize, NULL)) {
+        printError(TEXT("WriteProcessMemory C stub"));
+        goto cleanup;
+    }
+
+    // 4. Écrire la structure MANUAL_MAPPING_DATA
+    if (!WriteProcessMemory(hProcess, pRemoteData, pData, sizeof(MANUAL_MAPPING_DATA), NULL)) {
+        printError(TEXT("WriteProcessMemory Data"));
+        goto cleanup;
+    }
+
+    // 5. Créer le thread distant pointant sur le stub ASM avec pRemoteData comme argument
+    hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)pRemoteAsmStub, pRemoteData, 0, NULL);
+    if (hThread == NULL) {
+        printError(TEXT("CreateRemoteThread"));
+        goto cleanup;
+    }
+
+    return hThread;
+
+cleanup:
+    if (pRemoteMem) VirtualFreeEx(hProcess, pRemoteMem, 0, MEM_RELEASE);
+    return NULL;
+}
