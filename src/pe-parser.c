@@ -1,6 +1,13 @@
 #include <dll-injector/pe-parser.h>
 #include <winnt.h>
 
+/**
+ * @brief Lit un fichier PE valide et charge ses données brutes en mémoire.
+ *
+ * @param fileName Chemin vers le fichier PE à charger.
+ * @param pe Pointeur vers la structure IMAGE_PE_FILE à remplir.
+ * @return 0 en cas de succès, -1 si le fichier n'est pas une image PE valide.
+ */
 int SetRawData(const char *fileName, PIMAGE_PE_FILE pe)
 {
   FILE *fp;
@@ -24,11 +31,13 @@ int SetRawData(const char *fileName, PIMAGE_PE_FILE pe)
 }
 
 /**
- * IsValidImage - checks if the given file is a valid PE32+ image
+ * @brief Vérifie qu'un fichier est une image PE64 (PE32+) valide.
  *
- * @fileName: the name of the file to check
+ * Contrôle successivement : la signature DOS (MZ), la signature NT (PE),
+ * et le magic de l'en-tête optionnel (IMAGE_NT_OPTIONAL_HDR64_MAGIC).
  *
- * Returns true if the file is a valid PE32+ image, false otherwise
+ * @param fileName Chemin vers le fichier à valider.
+ * @return true si le fichier est une image PE32+ valide, false sinon.
  */
 bool IsValidImage(const char *fileName) {
   FILE *fp;
@@ -71,7 +80,7 @@ bool IsValidImage(const char *fileName) {
     return false;
   }
 
-  // Ensure PE header is within bounds
+  /* Vérification que l'en-tête PE est dans les limites du fichier. */
   if (tmpImageDosHeader.e_lfanew < 0 ||
       (long)tmpImageDosHeader.e_lfanew + (long)sizeof(DWORD) > fileSize) {
     fclose(fp);
@@ -88,7 +97,7 @@ bool IsValidImage(const char *fileName) {
     return false;
   }
 
-  // Optional header magic location must be in bounds
+  /* Vérification que la position du magic de l'en-tête optionnel est dans les limites. */
   {
     long optMagicOffset = (long)tmpImageDosHeader.e_lfanew + (long)sizeof(DWORD) + (long)sizeof(IMAGE_FILE_HEADER);
     if (optMagicOffset < 0 || optMagicOffset + (long)sizeof(WORD) > fileSize) {
@@ -118,12 +127,15 @@ bool IsValidImage(const char *fileName) {
 }
 
 /**
- * RvaToPtr - converts a Relative Virtual Address (RVA) to a file pointer
+ * @brief Convertit une adresse virtuelle relative (RVA) en pointeur de fichier.
  *
- * @pe: pointer to the IMAGE_PE_FILE structure representing the PE file
- * @rva: the Relative Virtual Address to convert
+ * Parcourt les sections du PE pour trouver celle qui contient le RVA et calcule
+ * le décalage correspondant dans les données brutes.
  *
- * Returns a pointer to the corresponding location in the file, or NULL if the RVA is invalid
+ * @param pe Pointeur vers la structure IMAGE_PE_FILE représentant le fichier PE.
+ * @param rva Adresse virtuelle relative à convertir.
+ * @return Pointeur vers l'emplacement correspondant dans les données brutes,
+ *         ou NULL si le RVA n'appartient à aucune section.
  */
 PVOID RvaToPtr(PIMAGE_PE_FILE pe, DWORD rva) {
   int i;
@@ -131,19 +143,18 @@ PVOID RvaToPtr(PIMAGE_PE_FILE pe, DWORD rva) {
   PIMAGE_NT_HEADERS64 NtHeader = (PIMAGE_NT_HEADERS64)((BYTE*)pe->RawData + dosHeader->e_lfanew);
 
   int numberOfSections = NtHeader->FileHeader.NumberOfSections;
-    
+
   PIMAGE_SECTION_HEADER  sectionHeader = (PIMAGE_SECTION_HEADER)(NtHeader + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER) + NtHeader->FileHeader.SizeOfOptionalHeader);
 
   for (i = 0; i < numberOfSections; i++) {
-      if (rva >= sectionHeader->VirtualAddress && 
+      if (rva >= sectionHeader->VirtualAddress &&
           rva < sectionHeader->VirtualAddress + sectionHeader->Misc.VirtualSize) {
-          
+
           DWORD fileOffset = sectionHeader->PointerToRawData + (rva - sectionHeader->VirtualAddress);
-          
+
           return (PVOID)((BYTE*)pe + fileOffset );
       }
       sectionHeader ++;
   }
   return NULL;
 }
-

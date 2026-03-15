@@ -3,29 +3,19 @@
 
 #pragma once
 
-//-----------
-// Headers
 #include <windows.h>
 #include <shellapi.h>
 
-//-----------
-// DLL
-//#ifdef SDLL_EXPORTS
+/* Macro d'exportation DLL. */
 #define EXPORT __declspec(dllexport)
-//#else
-//#define EXPORT __declspec(dllimport)
-//#endif
 
-//-----------
-// MACROS
-
-// UTF16("str") == L"str"  // Wide Character String / UTF-16
+/* UTF16("str") == L"str" — conversion de chaîne littérale en UTF-16. */
 #define _UTF16(x)   L##x
 #define UTF16(x)    _UTF16(x)
+
+/* Intervalle de rafraîchissement de la notification en millisecondes. */
 #define SLEEPTIME 500
 
-//-----------
-// Functions
 extern int g_sleepTime;
 extern int* g_sleepTime_addr;
 DWORD WINAPI Notify(LPVOID param);
