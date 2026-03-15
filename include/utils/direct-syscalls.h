@@ -72,7 +72,7 @@ NTSTATUS dAllocateVirtualMemory(
     ULONG     Protect
 );
 
-NSTATUS dProtectVirtualMemory(
+NTSTATUS dProtectVirtualMemory(
     HANDLE ProcessHandle,
     PVOID *BaseAddress, //in, out
     PSIZE_T RegionSize, //in, out
@@ -80,7 +80,7 @@ NSTATUS dProtectVirtualMemory(
     PULONG OldProtection //out
 );
 
-NSTATUS dReadVirtualMemory(
+NTSTATUS dReadVirtualMemory(
     HANDLE ProcessHandle,
     PVOID BaseAddress,
     PVOID Buffer, //out
