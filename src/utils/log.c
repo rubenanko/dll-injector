@@ -3,8 +3,8 @@
 /**
  * hexdump - prints the content of a buffer in hexadecimal format
  *
- * @buffer: pointer to the buffer to be printed
- * @bufferSize: size of the buffer in bytes
+ * @param buffer pointer to the buffer to be printed
+ * @param bufferSize size of the buffer in bytes
  */
 void hexdump(void *buffer, int bufferSize) {
   unsigned char *casted_buffer = buffer;

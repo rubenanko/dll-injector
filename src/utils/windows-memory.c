@@ -45,5 +45,3 @@ HANDLE create_snapshot()
 {
     return CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0); // TH32CS_SNAPPROCESS = 0x02, all processes
 }
-
-#endif

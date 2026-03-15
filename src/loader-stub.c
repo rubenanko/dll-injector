@@ -120,6 +120,6 @@ DWORD WINAPI C_LoaderStub(PMANUAL_MAPPING_DATA pData) {
 /**
  * @brief Marqueur de fin du stub C, utilisé pour calculer sa taille en mémoire.
  *
- * @return Aucun.
+ * @note Cette fonction ne retourne rien ; elle sert uniquement de marqueur de fin.
  */
 void C_LoaderStub_End(void) {}

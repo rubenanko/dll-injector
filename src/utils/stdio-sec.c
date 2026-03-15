@@ -3,9 +3,9 @@
 /**
  * seek_checked - safely seeks to a specific offset in a file
  *
- * @fp: pointer to the file stream
- * @offset: the offset to seek to
- * @size: the total size of the file
+ * @param fp pointer to the file stream
+ * @param offset the offset to seek to
+ * @param size the total size of the file
  *
  * Returns true if the seek was successful, false otherwise
  */
