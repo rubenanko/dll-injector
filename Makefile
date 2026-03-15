@@ -40,7 +40,7 @@ DLL_OUT := $(BD)/$(DLL).dll
 ASM_BIN := $(BD)/asm-stub.bin
 ASM_HDR := $(BD)/asm-stub-bin.h
 
-.PHONY: all clean copy ccdb debug release
+.PHONY: all clean clean-docs docs copy ccdb debug release
 all: $(EXE_OUT) $(DLL_OUT)
 
 debug:
@@ -81,6 +81,12 @@ copy: all
 
 clean:
 	@rm -rf $(BD) compile_commands.json
+
+docs:
+	cd docs && doxygen Doxyfile
+
+clean-docs:
+	@rm -rf docs/html docs/latex
 
 ccdb: clean
 	@bear -- $(MAKE) all

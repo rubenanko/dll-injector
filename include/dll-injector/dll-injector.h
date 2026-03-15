@@ -8,11 +8,17 @@
 #include <tchar.h>
 #include "pe-parser.h"
 
+/**
+ * @brief Structure de configuration transmise au stub de chargement distant.
+ *
+ * Contient les adresses des fonctions de résolution et l'adresse de base
+ * de la DLL mappée, nécessaires au stub C pour finaliser le chargement.
+ */
 typedef struct _MANUAL_MAPPING_DATA {
-  LPVOID pLoadLibraryA;
-  LPVOID pGetProcAddress;
-  LPVOID pBaseAddress;
-  LPVOID pCStubAddress;
+  LPVOID pLoadLibraryA;   /**< Adresse de LoadLibraryA, résolue par le stub ASM. */
+  LPVOID pGetProcAddress; /**< Adresse de GetProcAddress, résolue par le stub ASM. */
+  LPVOID pBaseAddress;    /**< Adresse de base de la DLL dans le processus cible. */
+  LPVOID pCStubAddress;   /**< Adresse du stub C dans le processus cible. */
 } MANUAL_MAPPING_DATA, *PMANUAL_MAPPING_DATA;
 
 DWORD ProcessWalking(char* exeFileName);
