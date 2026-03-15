@@ -28,7 +28,7 @@ EXE := dll-injector
 DLL := injected-dll
 
 # ---- Sources mapping ----
-dll-injector_SRC := $(SRC_DIR)/main.c $(SRC_DIR)/dll-injector.c $(SRC_DIR)/pe-parser.c $(SRC_DIR)/loader-stub.c $(SRC_DIR)/utils/stdio-sec.c
+dll-injector_SRC := $(SRC_DIR)/main.c $(SRC_DIR)/dll-injector.c $(SRC_DIR)/pe-parser.c $(SRC_DIR)/loader-stub.c $(SRC_DIR)/utils/stdio-sec.c $(SRC_DIR)/utils/peb-lookup.c
 dll-injector_LIB :=
 
 injected-dll_SRC := $(SRC_DIR)/simple-dll.c
