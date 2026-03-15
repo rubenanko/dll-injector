@@ -38,8 +38,8 @@
  * ASM Stub Imports (defined in syscall-stub.nasm)
  * ========================================================================= */
 
-extern void  SetSSN(DWORD ssn);
-extern void* RunSyscall;  /* called via cast — address of the stub */
+extern void SetSSN(DWORD ssn);
+extern void RunSyscall(void);  /* declared as function so its name decays to the correct address */
 
 /* ============================================================================
  * Syscall Infrastructure

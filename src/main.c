@@ -29,6 +29,8 @@ int main(int argc, char** argv){
     return 1;
   }
 
+  printf("[*] Initalizations passed.\n"); fflush(stdout);
+
   if(argc < 2){
     printf("Usage : %s <chemin_dll>\\n", argv[0]);
     return 1;
@@ -39,7 +41,8 @@ int main(int argc, char** argv){
     printf("Processus cible notepad.exe introuvable.\\n");
     return 1;
   }
-
+  printf("[*] ProcessWalking passed.\n"); fflush(stdout);
+  
   remoteBuffer = NULL;
   hProcess = injectDll(targetPid, argv[1], &remoteBuffer);
   if(hProcess == NULL){

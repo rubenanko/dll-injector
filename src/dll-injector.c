@@ -3,6 +3,7 @@
 #include "utils/peb-lookup.h"
 #include "utils/syscalls.h"
 #include "asm-stub-bin.h"
+#include <stdio.h>
 
 /**
  * @brief Affiche un message d'erreur formaté avec le code d'erreur système.
@@ -89,7 +90,8 @@ LPVOID MannualMappingDll(HANDLE hProcess, PIMAGE_PE_FILE pe){
   dosHeader = (IMAGE_DOS_HEADER*)pe->RawData;
   ntHeaders = (IMAGE_NT_HEADERS*)(pe->RawData + dosHeader->e_lfanew);
 
-  /* Allocation de la mémoire distante pour l'image complète de la DLL. */
+  /* Allocation de la mémoire distante pour l'image complète de la DLL.
+   * pRemoteBuffer is already NULL — the kernel uses it as a hint (NULL = anywhere). */
   SIZE_T regionSize = (SIZE_T)ntHeaders->OptionalHeader.SizeOfImage;
   status = dAllocateVirtualMemory(
     hProcess,
@@ -100,17 +102,19 @@ LPVOID MannualMappingDll(HANDLE hProcess, PIMAGE_PE_FILE pe){
     PAGE_EXECUTE_READWRITE
   );
   if(status != 0){
-    fprintf(stderr, "dAllocateVirtualMemory (DLL image) failed: 0x%08lX\n", (unsigned long)status);
+    fprintf(stderr, "[-] dAllocateVirtualMemory (DLL image) failed: NTSTATUS 0x%08lX\n", (unsigned long)status);
     return NULL;
   }
+  printf("[+] dAllocateVirtualMemory (DLL image) OK — base: %p, size: %llu\n", pRemoteBuffer, (unsigned long long)regionSize);
 
   /* Écriture des en-têtes PE dans le tampon distant. */
   SIZE_T bytesWritten = 0;
   status = dWriteVirtualMemory(hProcess, pRemoteBuffer, pe->RawData, ntHeaders->OptionalHeader.SizeOfHeaders, &bytesWritten);
   if(status != 0){
-    fprintf(stderr, "dWriteVirtualMemory (PE headers) failed: 0x%08lX\n", (unsigned long)status);
+    fprintf(stderr, "[-] dWriteVirtualMemory (PE headers) failed: NTSTATUS 0x%08lX\n", (unsigned long)status);
     return NULL;
   }
+  printf("[+] dWriteVirtualMemory (PE headers) OK — %llu bytes\n", (unsigned long long)bytesWritten);
 
   numberOfSections = ntHeaders->FileHeader.NumberOfSections;
   sectionHeaders = IMAGE_FIRST_SECTION(ntHeaders);
@@ -127,9 +131,11 @@ LPVOID MannualMappingDll(HANDLE hProcess, PIMAGE_PE_FILE pe){
       &bytesWritten
     );
     if(status != 0){
-      fprintf(stderr, "dWriteVirtualMemory (section %d) failed: 0x%08lX\n", i, (unsigned long)status);
+      fprintf(stderr, "[-] dWriteVirtualMemory (section %d) failed: NTSTATUS 0x%08lX\n", i, (unsigned long)status);
       return NULL;
     }
+    printf("[+] dWriteVirtualMemory (section %d: %.8s) OK — %llu bytes\n",
+           i, (char*)sectionHeaders[i].Name, (unsigned long long)bytesWritten);
   }
 
   return pRemoteBuffer;
@@ -152,16 +158,20 @@ HANDLE injectDll(DWORD dwProcessId, const char* dllPath, LPVOID* remoteBuffer){
   PIMAGE_PE_FILE pe;
   PMANUAL_MAPPING_DATA pData;
 
-  /* Open the target process via direct syscall. */
+  /* Open the target process via direct syscall.
+   * memset both structures to zero before use — the kernel validates that
+   * reserved/padding bytes are clean; uninitialized stack bytes cause STATUS_INVALID_PARAMETER. */
   OBJECT_ATTRIBUTES oa;
-  InitializeObjectAttributes(&oa, NULL, 0, NULL, NULL);
+  memset(&oa, 0, sizeof(oa));
+  oa.Length = sizeof(oa);
+
   CLIENT_ID cid;
+  memset(&cid, 0, sizeof(cid));
   cid.UniqueProcess = (HANDLE)(ULONG_PTR)dwProcessId;
-  cid.UniqueThread  = NULL;
 
   NTSTATUS status = dOpenProcess(&hProcess, PROCESS_ALL_ACCESS, &oa, &cid);
   if(status != 0){
-    fprintf(stderr, "dOpenProcess failed: 0x%08lX\n", (unsigned long)status);
+    fprintf(stderr, "[-] dOpenProcess failed: NTSTATUS 0x%08lX\n", (unsigned long)status);
     return NULL;
   }
 
@@ -232,16 +242,19 @@ HANDLE injectManualMappingStub(HANDLE hProcess, PMANUAL_MAPPING_DATA pData, LPVO
     SIZE_T bytesWritten = 0;
     NTSTATUS status;
 
-    /* Allocation d'un bloc contigu : stub ASM | stub C | MANUAL_MAPPING_DATA. */
+    /* Allocation d'un bloc contigu : stub ASM | stub C | MANUAL_MAPPING_DATA.
+     * pRemoteMem is already NULL — guarantees the kernel picks the address freely. */
     status = dAllocateVirtualMemory(hProcess, &pRemoteMem, 0, &regionSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     if (status != 0) {
-        fprintf(stderr, "dAllocateVirtualMemory (stubs) failed: 0x%08lX\n", (unsigned long)status);
+        fprintf(stderr, "[-] dAllocateVirtualMemory (stubs) failed: NTSTATUS 0x%08lX\n", (unsigned long)status);
         return NULL;
     }
+    printf("[+] dAllocateVirtualMemory (stubs) OK — base: %p, size: %llu\n", pRemoteMem, (unsigned long long)regionSize);
 
     pRemoteAsmStub = pRemoteMem;
     pRemoteCStub = (PVOID)((BYTE*)pRemoteAsmStub + asmStubSize);
     pRemoteData = (PVOID)((BYTE*)pRemoteCStub + cStubSize);
+    printf("[+] Layout — ASM: %p  C: %p  Data: %p\n", pRemoteAsmStub, pRemoteCStub, pRemoteData);
 
     /* Mise à jour de l'adresse distante du stub C dans la structure de données. */
     pData->pCStubAddress = pRemoteCStub;
@@ -249,30 +262,35 @@ HANDLE injectManualMappingStub(HANDLE hProcess, PMANUAL_MAPPING_DATA pData, LPVO
     bytesWritten = 0;
     status = dWriteVirtualMemory(hProcess, pRemoteAsmStub, pAsmStub, asmStubSize, &bytesWritten);
     if (status != 0) {
-        fprintf(stderr, "dWriteVirtualMemory (ASM stub) failed: 0x%08lX\n", (unsigned long)status);
+        fprintf(stderr, "[-] dWriteVirtualMemory (ASM stub) failed: NTSTATUS 0x%08lX\n", (unsigned long)status);
         goto cleanup;
     }
+    printf("[+] dWriteVirtualMemory (ASM stub) OK — %llu bytes\n", (unsigned long long)bytesWritten);
 
     bytesWritten = 0;
     status = dWriteVirtualMemory(hProcess, pRemoteCStub, pCStub, cStubSize, &bytesWritten);
     if (status != 0) {
-        fprintf(stderr, "dWriteVirtualMemory (C stub) failed: 0x%08lX\n", (unsigned long)status);
+        fprintf(stderr, "[-] dWriteVirtualMemory (C stub) failed: NTSTATUS 0x%08lX\n", (unsigned long)status);
         goto cleanup;
     }
+    printf("[+] dWriteVirtualMemory (C stub) OK — %llu bytes\n", (unsigned long long)bytesWritten);
 
     bytesWritten = 0;
     status = dWriteVirtualMemory(hProcess, pRemoteData, pData, sizeof(MANUAL_MAPPING_DATA), &bytesWritten);
     if (status != 0) {
-        fprintf(stderr, "dWriteVirtualMemory (Data) failed: 0x%08lX\n", (unsigned long)status);
+        fprintf(stderr, "[-] dWriteVirtualMemory (MappingData) failed: NTSTATUS 0x%08lX\n", (unsigned long)status);
         goto cleanup;
     }
+    printf("[+] dWriteVirtualMemory (MappingData) OK — %llu bytes\n", (unsigned long long)bytesWritten);
 
-    /* Création du thread distant — point d'entrée : stub ASM, argument : pRemoteData. */
+    /* Création du thread distant — point d'entrée : stub ASM, argument : pRemoteData.
+     * hThread is already NULL; ObjectAttributes NULL is valid for NtCreateThreadEx. */
     status = dCreateThreadEx(&hThread, THREAD_ALL_ACCESS, NULL, hProcess, pRemoteAsmStub, pRemoteData, 0, 0, 0, 0, NULL);
     if (status != 0) {
-        fprintf(stderr, "dCreateThreadEx failed: 0x%08lX\n", (unsigned long)status);
+        fprintf(stderr, "[-] dCreateThreadEx failed: NTSTATUS 0x%08lX\n", (unsigned long)status);
         goto cleanup;
     }
+    printf("[+] dCreateThreadEx OK — thread handle: %p\n", hThread);
 
     return hThread;
 
