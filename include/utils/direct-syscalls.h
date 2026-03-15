@@ -22,21 +22,12 @@ typedef NTSTATUS (NTAPI *pNtCreateThreadEx)(
     PVOID AttributeList
 );
 
-#ifndef MINGW_INTERFACE
+#ifndef _WINTERNL_
 
-#define InitializeObjectAttributes(p,n,a,r,s) { \
-    (p)->Length = sizeof(OBJECT_ATTRIBUTES); \
-    (p)->RootDirectory = r; \
-    (p)->Attributes = a; \
-    (p)->ObjectName = n; \
-    (p)->SecurityDescriptor = s; \
-    (p)->SecurityQualityOfService = NULL; \
-}
-
- typedef struct _CLIENT_ID {
+typedef struct _CLIENT_ID {
    HANDLE UniqueProcess;
    HANDLE UniqueThread;
- } CLIENT_ID, *PCLIENT_ID;
+} CLIENT_ID, *PCLIENT_ID;
 
 typedef struct _OBJECT_ATTRIBUTES {
     ULONG Length;
@@ -47,6 +38,17 @@ typedef struct _OBJECT_ATTRIBUTES {
     PVOID SecurityQualityOfService;
 } OBJECT_ATTRIBUTES, *POBJECT_ATTRIBUTES;
 
+#endif
+
+#ifndef InitializeObjectAttributes
+#define InitializeObjectAttributes(p,n,a,r,s) { \
+    (p)->Length = sizeof(OBJECT_ATTRIBUTES); \
+    (p)->RootDirectory = r; \
+    (p)->Attributes = a; \
+    (p)->ObjectName = n; \
+    (p)->SecurityDescriptor = s; \
+    (p)->SecurityQualityOfService = NULL; \
+}
 #endif
 
 NTSTATUS dCreateThreadEx(

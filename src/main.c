@@ -1,5 +1,6 @@
 #include <dll-injector/main.h>
 #include "utils/peb-lookup.h"
+#include "utils/syscalls.h"
 
 /**
  * @brief Point d'entrée du programme d'injection.
@@ -20,6 +21,11 @@ int main(int argc, char** argv){
    * Aucun appel système Windows ne doit précéder cette opération. */
   if(!InitDynamicAPIs()){
     printf("Échec de l'initialisation des API dynamiques via le PEB.\n");
+    return 1;
+  }
+
+  if(!InitSyscalls()){
+    printf("Échec de l'initialisation des syscalls dynamiques.\n");
     return 1;
   }
 

