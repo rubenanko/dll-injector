@@ -1,6 +1,8 @@
 #include <dll-injector/main.h>
+#include "utils/peb-lookup.h"
 
 /* Main entry:
+ * - Initializes dynamic API resolution (PEB walk)
  * - Finds notepad.exe if present
  * - Injects DLL path provided as argv[1]
  */
@@ -8,6 +10,13 @@ int main(int argc, char** argv){
   DWORD targetPid;
   HANDLE hProcess;
   LPVOID remoteBuffer;
+
+  /* Initialize all dynamically resolved APIs before any injection work.
+   * This must be the very first operation — no Windows API calls before this. */
+  if(!InitDynamicAPIs()){
+    printf("Failed to initialize dynamic APIs via PEB walk.\n");
+    return 1;
+  }
 
   if(argc < 2){
     printf("Usage: %s <dll_path>\\n", argv[0]);
@@ -27,6 +36,6 @@ int main(int argc, char** argv){
     return 1;
   }
 
-  CloseHandle(hProcess);
+  g_Api.pCloseHandle(hProcess);
   return 0;
 }
