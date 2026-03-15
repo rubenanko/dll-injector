@@ -3,5 +3,6 @@
 
 #include "dll-injector.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 #endif

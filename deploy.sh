@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SHARE="${SHARE:-$HOME/windows_share}"
-MODE="${MODE:-release}"
+MODE="${MODE:-debug}"
 
 echo "[*] Building (MODE=$MODE)..."
 make MODE="$MODE" clean all

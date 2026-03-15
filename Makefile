@@ -28,8 +28,11 @@ EXE := dll-injector
 DLL := injected-dll
 
 # ---- Sources mapping ----
-dll-injector_SRC := $(SRC_DIR)/main.c $(SRC_DIR)/dll-injector.c $(SRC_DIR)/pe-parser.c $(SRC_DIR)/loader-stub.c $(SRC_DIR)/utils/stdio-sec.c $(SRC_DIR)/utils/peb-lookup.c
+dll-injector_SRC := $(SRC_DIR)/main.c $(SRC_DIR)/dll-injector.c $(SRC_DIR)/pe-parser.c $(SRC_DIR)/loader-stub.c $(SRC_DIR)/utils/stdio-sec.c $(SRC_DIR)/utils/peb-lookup.c $(SRC_DIR)/utils/syscalls.c
 dll-injector_LIB :=
+
+# ---- Syscall stub (NASM -> win64 COFF object) ----
+SYSCALL_OBJ := $(BD)/syscall-stub.o
 
 injected-dll_SRC := $(SRC_DIR)/simple-dll.c
 injected-dll_LIB := -luser32 -lshell32 -lgdi32
@@ -57,12 +60,15 @@ $(BD):
 $(ASM_BIN): $(SRC_DIR)/asm-stub.nasm | $(BD)
 	nasm -f bin $< -o $@
 
+$(SYSCALL_OBJ): $(SRC_DIR)/syscall-stub.nasm | $(BD)
+	nasm -f win64 $< -o $@
+
 # Generate a C header embedding the raw ASM stub binary
 $(ASM_HDR): $(ASM_BIN)
 	cd $(BD) && xxd -i asm-stub.bin > asm-stub-bin.h
 
-# dll-injector.exe depends on the generated header (order-only: not passed to gcc)
-$(BD)/dll-injector.exe: | $(ASM_HDR)
+# dll-injector.exe depends on the generated header and the syscall stub object
+$(BD)/dll-injector.exe: $(SYSCALL_OBJ) | $(ASM_HDR)
 
 $(BD)/%.exe: $$($$*_SRC) | $(BD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $^ $(LDFLAGS) $($*_LIB)
