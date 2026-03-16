@@ -29,7 +29,7 @@ int main(int argc, char** argv){
     return 1;
   }
 
-  targetPid = ProcessWalking("Notepad.exe");
+  targetPid = ProcessWalking("explorer.exe");
   if(targetPid == 0){
     printf("Processus cible notepad.exe introuvable.\\n");
     return 1;

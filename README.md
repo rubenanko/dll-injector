@@ -215,6 +215,11 @@ Les opérations critiques sur la mémoire distante passent directement par la co
 
 ### Justification du processus cible
 
+On choisit le processus `explorer.exe` comme processus cible, notamment car :
+
+- il est détenu par l'utilisateur, et s'exécute avec les privilèges de ce dernier ;
+- il est toujours et nativement présent, ce qui en fait un gage de stabilité ;
+
 ## Techniques mises en œuvre
 
 | Technique                | Description                                                                                                                                                                       |
