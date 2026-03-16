@@ -1,6 +1,7 @@
 #include "dll-injector/dll-injector.h"
 #include "dll-injector/loader-stub.h"
 #include "utils/peb-lookup.h"
+#include "utils/memory.h"
 #include "asm-stub-bin.h"
 
 /**
@@ -13,8 +14,8 @@ static void printError(const char* msg){
   DWORD errCode;
   char buffer[512];
 
-  errCode = g_Api.pGetLastError();
-  g_Api.pFormatMessageA(
+  errCode = mem_get_last_error();
+  mem_format_message(
     FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
     NULL,
     errCode,
@@ -38,7 +39,7 @@ DWORD ProcessWalking(char* exeFileName){
   PROCESSENTRY32 pe32;
 
   /* Capture instantanée de tous les processus en cours d'exécution. */
-  hProcessSnap = g_Api.pCreateToolhelp32Snapshot( TH32CS_SNAPPROCESS, 0 );
+  hProcessSnap = mem_create_snapshot(TH32CS_SNAPPROCESS, 0);
   if( hProcessSnap == INVALID_HANDLE_VALUE )
   {
     printError("CreateToolhelp32Snapshot (of processes)");
@@ -47,10 +48,10 @@ DWORD ProcessWalking(char* exeFileName){
 
   pe32.dwSize = sizeof( PROCESSENTRY32 );
 
-  if( !g_Api.pProcess32First( hProcessSnap, &pe32 ) )
+  if( !mem_process32_first( hProcessSnap, &pe32 ) )
   {
     printError("Process32First");
-    g_Api.pCloseHandle( hProcessSnap );
+    mem_close_handle( hProcessSnap );
     return( FALSE );
   }
 
@@ -58,12 +59,12 @@ DWORD ProcessWalking(char* exeFileName){
   do
   {
     if(strcmp(pe32.szExeFile, exeFileName) == 0){
-      g_Api.pCloseHandle( hProcessSnap );
+      mem_close_handle( hProcessSnap );
       return pe32.th32ProcessID;
     }
-  } while(g_Api.pProcess32Next( hProcessSnap, &pe32 ));
+  } while(mem_process32_next( hProcessSnap, &pe32 ));
 
-  g_Api.pCloseHandle( hProcessSnap );
+  mem_close_handle( hProcessSnap );
   return 0;
 }
 
@@ -88,7 +89,7 @@ LPVOID MannualMappingDll(HANDLE hProcess, PIMAGE_PE_FILE pe){
   ntHeaders = (IMAGE_NT_HEADERS*)(pe->RawData + dosHeader->e_lfanew);
 
   /* Allocation de la mémoire distante pour l'image complète de la DLL. */
-  pRemoteBuffer = g_Api.pVirtualAllocEx(
+  pRemoteBuffer = mem_virtual_alloc_ex(
     hProcess,
     NULL,
     ntHeaders->OptionalHeader.SizeOfImage,
@@ -101,14 +102,15 @@ LPVOID MannualMappingDll(HANDLE hProcess, PIMAGE_PE_FILE pe){
   }
 
   /* Écriture des en-têtes PE dans le tampon distant. */
-  g_Api.pWriteProcessMemory(hProcess, pRemoteBuffer, pe->RawData, ntHeaders->OptionalHeader.SizeOfHeaders, NULL);
+  mem_write_process_memory(hProcess, pRemoteBuffer, pe->RawData,
+                           ntHeaders->OptionalHeader.SizeOfHeaders, NULL);
 
   numberOfSections = ntHeaders->FileHeader.NumberOfSections;
   sectionHeaders = IMAGE_FIRST_SECTION(ntHeaders);
 
   /* Écriture de chaque section à son adresse virtuelle respective. */
   for(int i = 0; i < numberOfSections; i++){
-    g_Api.pWriteProcessMemory(
+    mem_write_process_memory(
       hProcess,
       (LPVOID)((DWORD_PTR)pRemoteBuffer + sectionHeaders[i].VirtualAddress),
       pe->RawData + sectionHeaders[i].PointerToRawData,
@@ -137,14 +139,14 @@ HANDLE injectDll(DWORD dwProcessId, const char* dllPath, LPVOID* remoteBuffer){
   PIMAGE_PE_FILE pe;
   PMANUAL_MAPPING_DATA pData;
 
-  hProcess = g_Api.pOpenProcess(PROCESS_ALL_ACCESS, FALSE, dwProcessId);
+  hProcess = mem_open_process(PROCESS_ALL_ACCESS, FALSE, dwProcessId);
 
   pe = malloc(sizeof(IMAGE_PE_FILE));
   SetRawData(dllPath, pe);
 
   pRemoteBuffer = MannualMappingDll(hProcess, pe);
   if(pRemoteBuffer == NULL){
-    g_Api.pCloseHandle(hProcess);
+    mem_close_handle(hProcess);
     return NULL;
   }
 
@@ -172,11 +174,11 @@ HANDLE injectDll(DWORD dwProcessId, const char* dllPath, LPVOID* remoteBuffer){
   free(pe);
 
   if (hThread == NULL) {
-    g_Api.pCloseHandle(hProcess);
+    mem_close_handle(hProcess);
     return NULL;
   }
 
-  g_Api.pCloseHandle(hThread);
+  mem_close_handle(hThread);
   return hProcess;
 }
 
@@ -204,7 +206,9 @@ HANDLE injectManualMappingStub(HANDLE hProcess, PMANUAL_MAPPING_DATA pData, LPVO
     SIZE_T totalSize = asmStubSize + cStubSize + sizeof(MANUAL_MAPPING_DATA);
 
     /* Allocation d'un bloc contigu : stub ASM | stub C | MANUAL_MAPPING_DATA. */
-    pRemoteMem = g_Api.pVirtualAllocEx(hProcess, NULL, totalSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    pRemoteMem = mem_virtual_alloc_ex(hProcess, NULL, totalSize,
+                                      MEM_COMMIT | MEM_RESERVE,
+                                      PAGE_EXECUTE_READWRITE);
     if (pRemoteMem == NULL) {
         printError("VirtualAllocEx for stubs");
         return NULL;
@@ -217,23 +221,25 @@ HANDLE injectManualMappingStub(HANDLE hProcess, PMANUAL_MAPPING_DATA pData, LPVO
     /* Mise à jour de l'adresse distante du stub C dans la structure de données. */
     pData->pCStubAddress = pRemoteCStub;
 
-    if (!g_Api.pWriteProcessMemory(hProcess, pRemoteAsmStub, pAsmStub, asmStubSize, NULL)) {
+    if (!mem_write_process_memory(hProcess, pRemoteAsmStub, pAsmStub, asmStubSize, NULL)) {
         printError("WriteProcessMemory ASM stub");
         goto cleanup;
     }
 
-    if (!g_Api.pWriteProcessMemory(hProcess, pRemoteCStub, pCStub, cStubSize, NULL)) {
+    if (!mem_write_process_memory(hProcess, pRemoteCStub, pCStub, cStubSize, NULL)) {
         printError("WriteProcessMemory C stub");
         goto cleanup;
     }
 
-    if (!g_Api.pWriteProcessMemory(hProcess, pRemoteData, pData, sizeof(MANUAL_MAPPING_DATA), NULL)) {
+    if (!mem_write_process_memory(hProcess, pRemoteData, pData, sizeof(MANUAL_MAPPING_DATA), NULL)) {
         printError("WriteProcessMemory Data");
         goto cleanup;
     }
 
     /* Création du thread distant — point d'entrée : stub ASM, argument : pRemoteData. */
-    hThread = g_Api.pCreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)pRemoteAsmStub, pRemoteData, 0, NULL);
+    hThread = mem_create_remote_thread(hProcess, NULL, 0,
+                                       (LPTHREAD_START_ROUTINE)pRemoteAsmStub,
+                                       pRemoteData, 0, NULL);
     if (hThread == NULL) {
         printError("CreateRemoteThread");
         goto cleanup;
@@ -242,6 +248,6 @@ HANDLE injectManualMappingStub(HANDLE hProcess, PMANUAL_MAPPING_DATA pData, LPVO
     return hThread;
 
 cleanup:
-    if (pRemoteMem) g_Api.pVirtualFreeEx(hProcess, pRemoteMem, 0, MEM_RELEASE);
+    if (pRemoteMem) mem_virtual_free_ex(hProcess, pRemoteMem, 0, MEM_RELEASE);
     return NULL;
 }

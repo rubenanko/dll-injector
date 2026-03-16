@@ -1,5 +1,6 @@
 #include <dll-injector/main.h>
 #include "utils/peb-lookup.h"
+#include "utils/memory.h"
 
 /**
  * @brief Point d'entrée du programme d'injection.
@@ -41,6 +42,6 @@ int main(int argc, char** argv){
     return 1;
   }
 
-  g_Api.pCloseHandle(hProcess);
+  mem_close_handle(hProcess);
   return 0;
 }
