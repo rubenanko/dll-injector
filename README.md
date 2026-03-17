@@ -67,25 +67,26 @@ La structure du projet est la suivante :
 ```sh
 .
 ├── src/
-│   ├── main.c                    # Point d'entrée : init API, process walking, injection
+│   ├── main.tpl.c                # Template du point d'entrée (DLL embarquée, généré → build/main.c)
 │   ├── dll-injector.c            # Orchestration : manual mapping + injection des stubs
-│   ├── pe-parser.c               # Validation et lecture du fichier PE
+│   ├── pe-parser.c               # Chargement du PE depuis un buffer mémoire
 │   ├── loader-stub.c             # Stub C PIC (reloc + IAT + DllMain)
-│   ├── asm-stub.nasm             # Stub ASM PIC (PEB walk dans le processus cible)
+│   ├── asm-stub.asm              # Stub ASM PIC (PEB walk dans le processus cible)
+│   ├── encrypt.py                # Script de génération : embed + (futur chiffrement) → build/main.c
 │   ├── simple-dll.c              # DLL de démonstration (notification systray)
 │   └── utils/
 │       ├── peb-lookup.c          # Résolution dynamique des API Win32 via PEB + hachage FNV-1a
-│       ├── memory.c              # Wrappers mémoire : direct syscalls NT + fallback g_Api
+│       ├── memory.c              # Wrappers mémoire : direct syscalls NT + fallback via getApi()
 │       ├── direct-syscalls.asm   # Stubs ASM : appels NT directs (NtOpenProcess, NtAllocateVirtualMemory…)
-│       ├── log.c                 # Journalisation
-│       └── stdio-sec.c           # Sécurisation des entrées/sorties standard
+│       └── windows-memory.c      # Wrappers Windows Memory API
 ├── include/
 │   ├── dll-injector/             # En-têtes principaux
-│   ├── utils/                    # PEB lookup, macros, log, direct-syscalls, memory
+│   ├── utils/                    # PEB lookup, macros, direct-syscalls, memory
 │   └── windows/                  # Structures PE custom
 ├── docs/                         # Doxyfile + thème doxygen-awesome-css
 ├── test/                         # Tests unitaires (PE parser)
 ├── Makefile
+├── make.sh                       # Script de build alternatif produisant build/shellcode.bin
 └── deploy.sh                     # Build + copie vers le partage Windows
 ```
 
@@ -104,8 +105,8 @@ Il ne s'exécute pas dans le processus cible ; son rôle est de préparer, trans
 
 Après avoir écrit les trois éléments via `mem_write_process_memory` -- fonction n'étant qu'une interface pour le direct syscall `dWriteVirtualMemory` --, on crée le thread distant dont le point d'entrée est le début du stub ASM et l'argument (`rcx`) l'adresse distante de `MANUAL_MAPPING_DATA`.
 
-> **Détail d'implémentation :** Le bytecode du stub ASM est inclus à la compilation sous forme de tableau via `asm-stub-bin.h` (généré par `xxd -i`).
-> La taille du stub C est calculée par soustraction de symboles : `cStubSize = (BYTE*)C_LoaderStub_End − (BYTE*)C_LoaderStub`, ce qui suppose que les deux fonctions soient adjacentes dans le binaire final — garanti par leur isolation dans un objet compilé sans réordonnancement.
+> **Détail d'implémentation :** Le bytecode du stub ASM est désormais hardcodé directement dans `dll-injector.c` sous forme de tableau `unsigned char` marqué `DOT_TEXT` (section `.text`), éliminant la dépendance à `asm-stub-bin.h` générée par `xxd -i`.
+> La taille du stub C est calculée par soustraction de symboles : `cStubSize = (BYTE*)C_LoaderStub_End − (BYTE*)C_LoaderStub`. L'adresse de `C_LoaderStub` est exposée via un getter `getC_LoaderStubAddress()` défini dans `loader-stub.c`, car les options `-ffreestanding -nostdlib` empêchent les références directes à des symboles inter-TU dans ce contexte de build PIC.
 
 ### ASM Stub (`asm-stub.nasm`)
 
@@ -222,13 +223,16 @@ On choisit le processus `explorer.exe` comme processus cible, notamment car :
 
 ## Techniques mises en œuvre
 
-| Technique                | Description                                                                                                                                                                       |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Manual Mapping**       | Copie manuelle du PE en mémoire distante, sans `LoadLibrary`                                                                                                                      |
-| **API Hashing (FNV-1a)** | Résolution des API Win32 au runtime via parcours du PEB — aucun import suspect dans l'IAT                                                                                         |
-| **ASM stub PIC**         | Shellcode x64 position-independent : parcours du PEB dans le processus cible pour résoudre `LoadLibraryA` et `GetProcAddress`                                                     |
-| **C Loader stub PIC**    | Stub compilé sans CRT : relocation de base, résolution de l'IAT, appel du `DllMain`                                                                                               |
-| **Direct Syscalls (NT)** | Appels directs au noyau via l'instruction `syscall` x64, court-circuitant `ntdll.dll` et ses hooks userland (`NtOpenProcess`, `NtAllocateVirtualMemory`, `NtWriteVirtualMemory`…) |
+| Technique                       | Description                                                                                                                                                                       |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Manual Mapping**              | Copie manuelle du PE en mémoire distante, sans `LoadLibrary`                                                                                                                      |
+| **API Hashing (FNV-1a)**        | Résolution des API Win32 au runtime via parcours du PEB — aucun import suspect dans l'IAT                                                                                         |
+| **ASM stub PIC**                | Shellcode x64 position-independent : parcours du PEB dans le processus cible pour résoudre `LoadLibraryA` et `GetProcAddress`                                                     |
+| **C Loader stub PIC**           | Stub compilé sans CRT : relocation de base, résolution de l'IAT, appel du `DllMain`                                                                                               |
+| **Direct Syscalls (NT)**        | Appels directs au noyau via l'instruction `syscall` x64, court-circuitant `ntdll.dll` et ses hooks userland (`NtOpenProcess`, `NtAllocateVirtualMemory`, `NtWriteVirtualMemory`…) |
+| **DLL embarquée (`.text`)**     | La DLL payload est compilée dans l'injecteur sous forme de tableau `unsigned char` en section `.text` — aucun accès disque au runtime, pas de chemin de fichier exposé             |
+| **Extraction shellcode**        | `objcopy --only-section=.text` produit un blob binaire autonome sans en-têtes PE, intégrable dans un packer                                                                       |
+| **Chiffrement payload** _(WIP)_ | `encrypt.py` est prévu pour chiffrer le bytecode DLL (XOR/AES) avant embed — déchiffrement au runtime dans `WinMain` avant injection                                              |
 
 ## Pipeline de build
 
@@ -241,11 +245,15 @@ On choisit le processus `explorer.exe` comme processus cible, notamment car :
 ### Build
 
 ```bash
-# Build release (défaut)
+# Build release (défaut) — produit dll-injector.exe + injected-dll.dll
 make
 
 # Build debug
 make MODE=debug
+
+# Build shellcode autonome (branche embedded-dll)
+# Embed la DLL cible dans main.c, compile en PIC pur, extrait la section .text
+./make.sh build/injected-dll.dll   # → build/shellcode.bin
 
 # Build + déploiement vers ~/windows_share
 ./deploy.sh
@@ -257,18 +265,116 @@ make clean-docs  # supprime docs/html/ et docs/latex/
 
 Les artefacts sont produits dans `build/` :
 
-| Fichier            | Description             |
-| ------------------ | ----------------------- |
-| `dll-injector.exe` | L'injecteur             |
-| `injected-dll.dll` | La DLL de démonstration |
+| Fichier            | Description                                                             |
+| ------------------ | ----------------------------------------------------------------------- |
+| `dll-injector.exe` | L'injecteur (build Makefile classique)                                  |
+| `injected-dll.dll` | La DLL de démonstration                                                 |
+| `main.c`           | Généré par `encrypt.py` à partir de `main.tpl.c` — fichier temporaire  |
+| `shellcode.bin`    | Shellcode autonome extrait de `.text` (build `make.sh`)                 |
 
 ### Utilisation
 
+**Mode classique (Makefile) :**
+
 ```cmd
-dll-injector.exe <chemin_vers_la_dll>
+dll-injector.exe
 ```
 
-Le processus cible est **Notepad.exe** (codé en dur à titre de démonstration). L'injecteur localise le premier processus correspondant, mappe la DLL par manual mapping et exécute le loader via un thread distant.
+La DLL cible est désormais embarquée statiquement dans l'exécutable (tableau `bytecode[]` dans `.text`). Le processus cible est **Notepad.exe** (codé en dur). Aucun argument de chemin n'est requis.
+
+**Mode shellcode (`make.sh`) :**
+
+```bash
+# Fournir la DLL à embarquer
+./make.sh /chemin/vers/payload.dll
+# → build/shellcode.bin : section .text extraite, prête à être intégrée dans un faux main
+```
+
+## Branche `embedded-dll` — Packing vers un shellcode autonome
+
+### Objectif
+
+Transformer `dll-injector` en un shellcode autonome (`.bin`) ne dépendant d'aucun import PE, d'aucune section `.data`, et pouvant être intégré tel quel dans un _faux main_ (packer) qui le déchiffrera et lui passera le contrôle.
+
+### Changements apportés à la stratégie d'injection
+
+#### 1. Suppression de la lecture de DLL depuis le disque
+
+**Avant (`main`) :** `injectDll` prenait un `const char* dllPath`, ouvrait le fichier avec `fopen`, validait l'image PE (MZ → NT → PE32+), puis allouait un buffer sur le tas avec `malloc`.
+
+**Après (`embedded-dll`) :** La DLL est compilée sous forme de tableau `unsigned char bytecode[]` directement dans le `.text` de `main.tpl.c`. `injectDll` accepte désormais `(PVOID pe_raw_data, int size_pe_raw_data)`. `SetRawDataBis` se contente d'affecter le pointeur et la taille sans aucune allocation.
+
+```
+Avant : dllPath → fopen → malloc → SetRawData → pe->RawData
+Après : bytecode[] (section .text) → SetRawDataBis → pe->RawData (pointeur direct)
+```
+
+Conséquence : suppression de `IsValidImage`, `SetRawData`, de tout `fopen/fclose/fread`, et de `malloc/free` dans le chemin critique — le code ne contient plus de dépendances CRT.
+
+#### 2. Génération de `main.c` par template
+
+`src/main.c` est remplacé par `src/main.tpl.c` contenant deux marqueurs :
+- `SET_BYTECODE_SIZE` → remplacé par la taille en octets de la DLL
+- `SET_BYTECODE_ARRAY` → remplacé par l'initializer C du tableau
+
+`src/encrypt.py` lit la DLL compilée, formate le tableau C et écrit `build/main.c`. Le Makefile ajoute cette étape comme prérequis de `dll-injector.exe`.
+
+> **Prochaine étape :** `encrypt.py` est prévu pour chiffrer le tableau (XOR ou AES) avant de l'injecter dans le template — la clé de déchiffrement sera appliquée au runtime dans `WinMain` avant l'appel à `injectDll`.
+
+#### 3. Tout en section `.text` — préparation PIC pur
+
+La macro `DOT_TEXT` (`__attribute__((section(".text")))`) est appliquée sur :
+- `bytecode[]` et `bytecode_size` dans `main.tpl.c`
+- `build_asm_stub_bin[]` et sa longueur dans `dll-injector.c`
+- `g_Api` (instance globale de `DYNAMIC_APIS`) dans `peb-lookup.h`
+- `targetProcess[]` (nom du processus cible)
+
+L'objectif est que l'intégralité du code et des données réside dans `.text` afin qu'un `objcopy --only-section=.text` suffise à extraire un blob exécutable complet.
+
+#### 4. Stub ASM hardcodé — suppression de `asm-stub-bin.h`
+
+Le bytecode du stub ASM (576 octets) est désormais défini directement dans `dll-injector.c` comme tableau `DOT_TEXT static unsigned char build_asm_stub_bin[576]`, éliminant la dépendance à `asm-stub-bin.h` (anciennement généré par `xxd -i`). La section correspondante dans `make.sh` est commentée.
+
+#### 5. Accès aux APIs via `getApi()` au lieu du global `g_Api`
+
+Sous `-ffreestanding -nostdlib`, les références directes à des variables globales définies dans d'autres TU peuvent être problématiques dans un contexte PIC pur. Les wrappers de `memory.c` passent tous par `getApi()` (défini dans `peb-lookup.c`), un simple accesseur retournant `&g_Api`, au lieu d'accéder directement au global.
+
+De même, l'adresse du stub C est exposée via `getC_LoaderStubAddress()` (défini dans `loader-stub.c`) plutôt que par une référence directe à `C_LoaderStub` depuis `dll-injector.c`.
+
+#### 6. Élimination de toutes les allocations dynamiques dans `injectDll`
+
+Les structures `MANUAL_MAPPING_DATA` et `IMAGE_PE_FILE` sont allouées sur la pile (stack-local) dans `injectDll`. Les `malloc`/`free` correspondants ont été supprimés.
+
+#### 7. Suppression de `printError` et des dépendances `stdio`
+
+Toutes les dépendances à `<stdio.h>` (`fprintf`, `fopen`, `fclose`, `fread`, `fseek`, `ftell`, `perror`) et à `<string.h>` (`strcmp`) sont supprimées du chemin d'injection :
+- `printError` est retiré — les erreurs sont silencieuses (retour `NULL`/`FALSE`).
+- `strcmp` est remplacé par `equalStrings`, une comparaison byte-à-byte inline sans dépendance libc.
+
+#### 8. `InitDynamicAPIs` retourne un pointeur
+
+`InitDynamicAPIs` retourne désormais `DYNAMIC_APIS*` (pointeur sur `g_Api`) au lieu de `bool`, permettant au `WinMain` de détecter l'échec d'initialisation tout en récupérant l'API table en une seule opération.
+
+### Pipeline de build shellcode (`make.sh`)
+
+```
+injected-dll.dll (input)
+    │
+    ▼
+encrypt.py → build/main.c        (embed DLL en bytecode C, futur : XOR/AES)
+    │
+    ▼
+x86_64-w64-mingw32-gcc -ffreestanding -nostdlib -Os -c *.c → build/*.o
+nasm -f win64 *.asm → build/*.o
+    │
+    ▼
+x86_64-w64-mingw32-ld -nostdlib → build/combined.o
+    │
+    ▼
+objcopy -O binary --only-section=.text → build/shellcode.bin
+```
+
+Le `.bin` produit est un shellcode x64 autonome, sans en-têtes PE, sans import table — prêt à être intégré et déchiffré par un faux main (packer).
 
 ## Choix Techniques
 
@@ -302,6 +408,7 @@ Ce faisant, on évite :
 2. **Direct Syscalls (EAT Sorting)** : Pour les primitives d'injection (`NtAllocateVirtualMemory`, `NtWriteVirtualMemory`, etc.), nous utilisons des appels système directs.
 3. **Anti-Sandbox** :
 4. **Obfuscation Statique** :
+5. **DLL embarquée + extraction shellcode (branche `embedded-dll`)** : La DLL payload n'est plus chargée depuis le disque au runtime. Elle est compilée dans l'injecteur lui-même (tableau `bytecode[]` dans la section `.text`). L'ensemble — injecteur + DLL — est ensuite extrait en un seul blob `.bin` visant à être intégré dans un _faux main_ (packer). Voir la section dédiée ci-dessous.
 
 ### Résultats de tests
 
