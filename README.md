@@ -198,7 +198,6 @@ Les opérations critiques sur la mémoire distante passent directement par la co
 | `Process32First` / `Process32Next` | Itération sur les entrées du snapshot    |
 | `VirtualFreeEx`                    | Libération de mémoire distante           |
 | `CloseHandle`                      | Fermeture des handles                    |
-| `GetLastError` / `FormatMessageA`  | Gestion et formatage des erreurs         |
 
 > [!TIP]
 > Il est à noter que toutes les interfaces de l'API Windows n'ont pas d'""équivalent direct syscall" immédiat.
@@ -216,10 +215,10 @@ Les opérations critiques sur la mémoire distante passent directement par la co
 
 ### Justification du processus cible
 
-On choisit le processus `explorer.exe` comme processus cible, notamment car :
+On choisit le processus `Notepad.exe` comme processus cible de démonstration, notamment car :
 
 - il est détenu par l'utilisateur, et s'exécute avec les privilèges de ce dernier ;
-- il est toujours et nativement présent, ce qui en fait un gage de stabilité ;
+- il est facilement instanciable pour les tests, et sa charge mémoire est négligeable ;
 
 ## Techniques mises en œuvre
 
@@ -294,34 +293,26 @@ La DLL cible est désormais embarquée statiquement dans l'exécutable (tableau 
 
 ### Objectif
 
-Transformer `dll-injector` en un shellcode autonome (`.bin`) ne dépendant d'aucun import PE, d'aucune section `.data`, et pouvant être intégré tel quel dans un _faux main_ (packer) qui le déchiffrera et lui passera le contrôle.
+Transformer `dll-injector` en un shellcode autonome (`.bin`) pouvant être intégré tel quel dans un _faux main_ (packer) qui le déchiffrera et lui passera le contrôle.
+Le binaire produit ne dépend d'aucun import PE, d'aucune section `.data`, et ne lit aucun fichier à l'exécution.
 
-### Changements apportés à la stratégie d'injection
+### DLL embarquée dans la section `.text`
 
-#### 1. Suppression de la lecture de DLL depuis le disque
+La DLL payload est compilée directement dans l'injecteur sous forme de tableau `DOT_TEXT static unsigned char bytecode[]` dans `main.tpl.c`. `injectDll` accepte `(PVOID pe_raw_data, int size_pe_raw_data)` ; `SetRawDataBis` affecte le pointeur et la taille sans aucune allocation ni accès disque.
 
-**Avant (`main`) :** `injectDll` prenait un `const char* dllPath`, ouvrait le fichier avec `fopen`, validait l'image PE (MZ → NT → PE32+), puis allouait un buffer sur le tas avec `malloc`.
+Cette approche supprime l'intégralité des dépendances CRT dans le chemin d'injection : `IsValidImage`, `SetRawData`, tout `fopen/fclose/fread/fseek/ftell`, et `malloc/free`.
 
-**Après (`embedded-dll`) :** La DLL est compilée sous forme de tableau `unsigned char bytecode[]` directement dans le `.text` de `main.tpl.c`. `injectDll` accepte désormais `(PVOID pe_raw_data, int size_pe_raw_data)`. `SetRawDataBis` se contente d'affecter le pointeur et la taille sans aucune allocation.
+### Génération de `main.c` par template
 
-```
-Avant : dllPath → fopen → malloc → SetRawData → pe->RawData
-Après : bytecode[] (section .text) → SetRawDataBis → pe->RawData (pointeur direct)
-```
+`src/main.tpl.c` contient deux marqueurs substitués par `src/encrypt.py` au moment du build :
+- `SET_BYTECODE_SIZE` → taille en octets de la DLL compilée
+- `SET_BYTECODE_ARRAY` → initializer C du tableau de bytecode
 
-Conséquence : suppression de `IsValidImage`, `SetRawData`, de tout `fopen/fclose/fread`, et de `malloc/free` dans le chemin critique — le code ne contient plus de dépendances CRT.
+`encrypt.py` lit la DLL compilée, formate le tableau C et écrit `build/main.c`. Le Makefile intègre cette génération comme prérequis de `dll-injector.exe`.
 
-#### 2. Génération de `main.c` par template
+> **Évolution prévue :** `encrypt.py` est prévu pour chiffrer le tableau (XOR ou AES) avant embed — la clé de déchiffrement sera appliquée au runtime dans `WinMain` avant l'appel à `injectDll`.
 
-`src/main.c` est remplacé par `src/main.tpl.c` contenant deux marqueurs :
-- `SET_BYTECODE_SIZE` → remplacé par la taille en octets de la DLL
-- `SET_BYTECODE_ARRAY` → remplacé par l'initializer C du tableau
-
-`src/encrypt.py` lit la DLL compilée, formate le tableau C et écrit `build/main.c`. Le Makefile ajoute cette étape comme prérequis de `dll-injector.exe`.
-
-> **Prochaine étape :** `encrypt.py` est prévu pour chiffrer le tableau (XOR ou AES) avant de l'injecter dans le template — la clé de déchiffrement sera appliquée au runtime dans `WinMain` avant l'appel à `injectDll`.
-
-#### 3. Tout en section `.text` — préparation PIC pur
+### Architecture PIC pure — tout en section `.text`
 
 La macro `DOT_TEXT` (`__attribute__((section(".text")))`) est appliquée sur :
 - `bytecode[]` et `bytecode_size` dans `main.tpl.c`
@@ -329,31 +320,24 @@ La macro `DOT_TEXT` (`__attribute__((section(".text")))`) est appliquée sur :
 - `g_Api` (instance globale de `DYNAMIC_APIS`) dans `peb-lookup.h`
 - `targetProcess[]` (nom du processus cible)
 
-L'objectif est que l'intégralité du code et des données réside dans `.text` afin qu'un `objcopy --only-section=.text` suffise à extraire un blob exécutable complet.
+L'intégralité du code et des données réside dans `.text` : un `objcopy --only-section=.text` suffit à extraire un blob exécutable complet, sans en-têtes PE.
 
-#### 4. Stub ASM hardcodé — suppression de `asm-stub-bin.h`
+### Stub ASM hardcodé dans `dll-injector.c`
 
-Le bytecode du stub ASM (576 octets) est désormais défini directement dans `dll-injector.c` comme tableau `DOT_TEXT static unsigned char build_asm_stub_bin[576]`, éliminant la dépendance à `asm-stub-bin.h` (anciennement généré par `xxd -i`). La section correspondante dans `make.sh` est commentée.
+Le bytecode du stub ASM (576 octets) est défini directement dans `dll-injector.c` comme tableau `DOT_TEXT static unsigned char build_asm_stub_bin[576]`, éliminant toute dépendance à un fichier header généré par `xxd -i` au moment du build.
 
-#### 5. Accès aux APIs via `getApi()` au lieu du global `g_Api`
+### Accès inter-TU via accesseurs dédiés
 
-Sous `-ffreestanding -nostdlib`, les références directes à des variables globales définies dans d'autres TU peuvent être problématiques dans un contexte PIC pur. Les wrappers de `memory.c` passent tous par `getApi()` (défini dans `peb-lookup.c`), un simple accesseur retournant `&g_Api`, au lieu d'accéder directement au global.
+Sous `-ffreestanding -nostdlib`, les références directes à des symboles définis dans d'autres TU sont problématiques en PIC pur. Deux accesseurs sont introduits :
+- `getApi()` (dans `peb-lookup.c`) retourne `&g_Api` — tous les wrappers de `memory.c` passent par cet accesseur.
+- `getC_LoaderStubAddress()` (dans `loader-stub.c`) retourne l'adresse de `C_LoaderStub` — utilisé dans `dll-injector.c`.
 
-De même, l'adresse du stub C est exposée via `getC_LoaderStubAddress()` (défini dans `loader-stub.c`) plutôt que par une référence directe à `C_LoaderStub` depuis `dll-injector.c`.
+### Élimination des dépendances CRT
 
-#### 6. Élimination de toutes les allocations dynamiques dans `injectDll`
-
-Les structures `MANUAL_MAPPING_DATA` et `IMAGE_PE_FILE` sont allouées sur la pile (stack-local) dans `injectDll`. Les `malloc`/`free` correspondants ont été supprimés.
-
-#### 7. Suppression de `printError` et des dépendances `stdio`
-
-Toutes les dépendances à `<stdio.h>` (`fprintf`, `fopen`, `fclose`, `fread`, `fseek`, `ftell`, `perror`) et à `<string.h>` (`strcmp`) sont supprimées du chemin d'injection :
-- `printError` est retiré — les erreurs sont silencieuses (retour `NULL`/`FALSE`).
-- `strcmp` est remplacé par `equalStrings`, une comparaison byte-à-byte inline sans dépendance libc.
-
-#### 8. `InitDynamicAPIs` retourne un pointeur
-
-`InitDynamicAPIs` retourne désormais `DYNAMIC_APIS*` (pointeur sur `g_Api`) au lieu de `bool`, permettant au `WinMain` de détecter l'échec d'initialisation tout en récupérant l'API table en une seule opération.
+- `MANUAL_MAPPING_DATA` et `IMAGE_PE_FILE` sont alloués sur la pile dans `injectDll` — aucun `malloc`/`free`.
+- Les erreurs sont silencieuses (retour `NULL`/`FALSE`) — aucun `fprintf`/`printError`.
+- `strcmp` est remplacé par `equalStrings`, comparaison byte-à-byte inline sans dépendance libc.
+- `InitDynamicAPIs` retourne `DYNAMIC_APIS*` (pointeur sur `g_Api`) — détection d'échec et récupération de la table en une seule opération.
 
 ### Pipeline de build shellcode (`make.sh`)
 
