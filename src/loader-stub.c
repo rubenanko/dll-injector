@@ -1,5 +1,18 @@
 #include <dll-injector/loader-stub.h>
 
+
+
+/**
+ * @brief Les options de construction du programme final empêche les fichiers c d'accéder
+ *        aux ressources des autres si ce n'est à travers des appels de fonctions
+ *
+ * @return l'adresse de la fonction C_LoaderStubAddress
+ */
+LPVOID getC_LoaderStubAddress()
+{
+  return (LPVOID)C_LoaderStub;
+} 
+
 /**
  * @brief Stub de chargement PIC exécuté dans l'espace mémoire du processus cible.
  *

