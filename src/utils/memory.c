@@ -1,6 +1,6 @@
-#include "utils/peb-lookup.h"
-#include "utils/direct-syscalls.h"
-#include "utils/memory.h"
+#include <utils/peb-lookup.h>
+#include <utils/direct-syscalls.h>
+#include <utils/memory.h>
 
 #ifndef OBJ_INHERIT
 #define OBJ_INHERIT 0x00000002L

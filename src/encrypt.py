@@ -3,8 +3,8 @@ from pathlib import Path
 from random import randint
 from typing import List
 
-OUTPUT_PATH = "main.c"
-TEMPLATE_PATH = "main.tpl.c"
+OUTPUT_PATH = "build/main.c"
+TEMPLATE_PATH = "src/main.tpl.c"
 
 
 def main(argv: List[str]) -> None:

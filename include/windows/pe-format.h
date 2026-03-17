@@ -1,6 +1,5 @@
 #ifndef PE_FORMAT_H
 #define PE_FORMAT_H
-#include <stdio.h>
 #define MINGW_INTERFACE
 #ifdef MINGW_INTERFACE
 #include <minwindef.h>

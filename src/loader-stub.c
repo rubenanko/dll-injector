@@ -1,4 +1,4 @@
-#include "dll-injector/loader-stub.h"
+#include <dll-injector/loader-stub.h>
 
 /**
  * @brief Stub de chargement PIC exécuté dans l'espace mémoire du processus cible.

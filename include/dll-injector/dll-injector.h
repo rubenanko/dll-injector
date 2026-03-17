@@ -4,9 +4,8 @@
 #include <windows.h>
 #include <string.h>
 #include <tlhelp32.h>
-#include <stdio.h>
 #include <tchar.h>
-#include "pe-parser.h"
+#include <dll-injector/pe-parser.h>
 
 /**
  * @brief Structure de configuration transmise au stub de chargement distant.
@@ -21,6 +20,7 @@ typedef struct _MANUAL_MAPPING_DATA {
   LPVOID pCStubAddress;   /**< Adresse du stub C dans le processus cible. */
 } MANUAL_MAPPING_DATA, *PMANUAL_MAPPING_DATA;
 
+int equalStrings(char * str1, char * str2);
 DWORD ProcessWalking(char* exeFileName);
 LPVOID MannualMappingDll(HANDLE hProcess, PIMAGE_PE_FILE pe);
 HANDLE injectDll(DWORD dwProcessId, PVOID pe_raw_data, int size_pe_raw_data, LPVOID* remoteBuffer);

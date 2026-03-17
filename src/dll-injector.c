@@ -1,30 +1,27 @@
-#include "dll-injector/dll-injector.h"
-#include "dll-injector/loader-stub.h"
-#include "utils/peb-lookup.h"
-#include "utils/memory.h"
-#include "asm-stub-bin.h"
+#include <dll-injector/dll-injector.h>
+#include <dll-injector/loader-stub.h>
+#include <utils/peb-lookup.h>
+#include <utils/memory.h>
+#include <asm-stub-bin.h>
 
 /**
- * @brief Affiche un message d'erreur formaté avec le code d'erreur système.
+ * @brief retourne vrai si les chaines sont égales faux sinon
+ *        
  *
- * @param msg Préfixe descriptif de l'opération ayant échoué.
- * @return Aucun.
+ * @param str1 chaine 1
+ * @param str2 chaine 2
+ * @return str1 == str2
  */
-static void printError(const char* msg){
-  DWORD errCode;
-  char buffer[512];
 
-  errCode = mem_get_last_error();
-  mem_format_message(
-    FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-    NULL,
-    errCode,
-    0,
-    buffer,
-    (DWORD)(sizeof(buffer) / sizeof(char)),
-    NULL
-  );
-  fprintf(stderr, "%s failed with error %lu: %s\n", msg, errCode, buffer);
+int equalStrings(char * str1, char * str2)
+{
+  while(*str1)
+  {
+    if(*str1++ != *str2++)
+      return 0;
+  }
+
+  return (*str2 == 0);
 }
 
 /**
@@ -42,7 +39,6 @@ DWORD ProcessWalking(char* exeFileName){
   hProcessSnap = mem_create_snapshot(TH32CS_SNAPPROCESS, 0);
   if( hProcessSnap == INVALID_HANDLE_VALUE )
   {
-    printError("CreateToolhelp32Snapshot (of processes)");
     return( FALSE );
   }
 
@@ -50,7 +46,6 @@ DWORD ProcessWalking(char* exeFileName){
 
   if( !mem_process32_first( hProcessSnap, &pe32 ) )
   {
-    printError("Process32First");
     mem_close_handle( hProcessSnap );
     return( FALSE );
   }
@@ -58,7 +53,7 @@ DWORD ProcessWalking(char* exeFileName){
   /* Itération sur les entrées du snapshot jusqu'à correspondance du nom. */
   do
   {
-    if(strcmp(pe32.szExeFile, exeFileName) == 0){
+    if(equalStrings(pe32.szExeFile, exeFileName)){
       mem_close_handle( hProcessSnap );
       return pe32.th32ProcessID;
     }
@@ -97,7 +92,6 @@ LPVOID MannualMappingDll(HANDLE hProcess, PIMAGE_PE_FILE pe){
     PAGE_EXECUTE_READWRITE
   );
   if(pRemoteBuffer == NULL){
-    printError("VirtualAllocEx");
     return NULL;
   }
 
@@ -137,41 +131,36 @@ LPVOID MannualMappingDll(HANDLE hProcess, PIMAGE_PE_FILE pe){
 HANDLE injectDll(DWORD dwProcessId, PVOID pe_raw_data, int size_pe_raw_data, LPVOID* remoteBuffer){
   HANDLE hProcess;
   LPVOID pRemoteBuffer;
-  PMANUAL_MAPPING_DATA pData;
+  MANUAL_MAPPING_DATA data = {0};
+  IMAGE_PE_FILE pe = {};
 
   hProcess = mem_open_process(PROCESS_ALL_ACCESS, FALSE, dwProcessId);
 
-  PIMAGE_PE_FILE pe =(PIMAGE_PE_FILE)malloc(sizeof(IMAGE_PE_FILE));
-  SetRawDataBis(pe_raw_data, size_pe_raw_data, pe);
+  SetRawDataBis(pe_raw_data, size_pe_raw_data, &pe);
 
-  pRemoteBuffer = MannualMappingDll(hProcess, pe);
+  pRemoteBuffer = MannualMappingDll(hProcess, &pe);
   if(pRemoteBuffer == NULL){
     mem_close_handle(hProcess);
     return NULL;
   }
 
-  pData = (PMANUAL_MAPPING_DATA)malloc(sizeof(MANUAL_MAPPING_DATA));
-  pData->pBaseAddress = pRemoteBuffer;
+  data.pBaseAddress = pRemoteBuffer;
 
-  pData->pLoadLibraryA   = NULL; /* Résolu par le stub ASM dans le processus cible. */
-  pData->pGetProcAddress = NULL; /* Résolu par le stub ASM dans le processus cible. */
-  pData->pCStubAddress   = NULL; /* Fixé par injectManualMappingStub. */
+  data.pLoadLibraryA   = NULL; /* Résolu par le stub ASM dans le processus cible. */
+  data.pGetProcAddress = NULL; /* Résolu par le stub ASM dans le processus cible. */
+  data.pCStubAddress   = NULL; /* Fixé par injectManualMappingStub. */
 
   /* Le stub ASM est embarqué à la compilation via asm-stub-bin.h (généré par xxd -i). */
-  BYTE *asmStubBuffer = asm_stub_bin;
-  long asmStubSize = (long)asm_stub_bin_len;
+  BYTE *asmStubBuffer = build_asm_stub_bin;
+  long asmStubSize = (long)build_asm_stub_bin_len;
 
   /* Calcul de la taille du stub C compilé en PIC. */
   DWORD cStubSize = (DWORD)((BYTE *)C_LoaderStub_End - (BYTE *)C_LoaderStub);
 
   HANDLE hThread = injectManualMappingStub(
-      hProcess, pData,
+      hProcess, &data,
       asmStubBuffer, (DWORD)asmStubSize,
       (LPVOID)C_LoaderStub, cStubSize);
-
-  free(pData);
-  free(pe->RawData);
-  free(pe);
 
   if (hThread == NULL) {
     mem_close_handle(hProcess);
@@ -210,7 +199,6 @@ HANDLE injectManualMappingStub(HANDLE hProcess, PMANUAL_MAPPING_DATA pData, LPVO
                                       MEM_COMMIT | MEM_RESERVE,
                                       PAGE_EXECUTE_READWRITE);
     if (pRemoteMem == NULL) {
-        printError("VirtualAllocEx for stubs");
         return NULL;
     }
 
@@ -222,17 +210,14 @@ HANDLE injectManualMappingStub(HANDLE hProcess, PMANUAL_MAPPING_DATA pData, LPVO
     pData->pCStubAddress = pRemoteCStub;
 
     if (!mem_write_process_memory(hProcess, pRemoteAsmStub, pAsmStub, asmStubSize, NULL)) {
-        printError("WriteProcessMemory ASM stub");
         goto cleanup;
     }
 
     if (!mem_write_process_memory(hProcess, pRemoteCStub, pCStub, cStubSize, NULL)) {
-        printError("WriteProcessMemory C stub");
         goto cleanup;
     }
 
     if (!mem_write_process_memory(hProcess, pRemoteData, pData, sizeof(MANUAL_MAPPING_DATA), NULL)) {
-        printError("WriteProcessMemory Data");
         goto cleanup;
     }
 
@@ -241,7 +226,6 @@ HANDLE injectManualMappingStub(HANDLE hProcess, PMANUAL_MAPPING_DATA pData, LPVO
                                        (LPTHREAD_START_ROUTINE)pRemoteAsmStub,
                                        pRemoteData, 0, NULL);
     if (hThread == NULL) {
-        printError("CreateRemoteThread");
         goto cleanup;
     }
 
