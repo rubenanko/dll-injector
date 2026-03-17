@@ -15,6 +15,7 @@
 
 bool IsValidImage(const char* fileName);
 int SetRawData(const char * fileName,PIMAGE_PE_FILE pe);
+void SetRawDataBis(PVOID pe_raw_data, int size_pe_raw_data, PIMAGE_PE_FILE pe);
 PVOID RvaToPtr(PIMAGE_PE_FILE pe, DWORD rva);
 
 #endif // !PE_PARSER_H

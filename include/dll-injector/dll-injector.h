@@ -23,7 +23,7 @@ typedef struct _MANUAL_MAPPING_DATA {
 
 DWORD ProcessWalking(char* exeFileName);
 LPVOID MannualMappingDll(HANDLE hProcess, PIMAGE_PE_FILE pe);
-HANDLE injectDll(DWORD dwProcessId, const char* dllPath, LPVOID* remoteBuffer);
+HANDLE injectDll(DWORD dwProcessId, PVOID pe_raw_data, int size_pe_raw_data, LPVOID* remoteBuffer);
 HANDLE injectManualMappingStub(HANDLE hProcess, PMANUAL_MAPPING_DATA pData, LPVOID pAsmStub, DWORD asmStubSize, LPVOID pCStub, DWORD cStubSize);
 
 #endif // !DLL_INJECTOR_H

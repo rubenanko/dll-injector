@@ -129,20 +129,20 @@ LPVOID MannualMappingDll(HANDLE hProcess, PIMAGE_PE_FILE pe){
  * puis injecte et exécute le stub de chargement via un thread distant.
  *
  * @param dwProcessId Identifiant du processus cible.
- * @param dllPath Chemin absolu vers le fichier DLL à injecter.
+ * @param pe_raw_data Bytecode de la DLL à injecter.
+ * @param size_pe_raw_data Taille du bytecode pe_raw_data
  * @param remoteBuffer Pointeur de sortie vers le tampon distant alloué (non utilisé en retour).
  * @return Handle du processus cible en cas de succès, ou NULL en cas d'erreur.
  */
-HANDLE injectDll(DWORD dwProcessId, const char* dllPath, LPVOID* remoteBuffer){
+HANDLE injectDll(DWORD dwProcessId, PVOID pe_raw_data, int size_pe_raw_data, LPVOID* remoteBuffer){
   HANDLE hProcess;
   LPVOID pRemoteBuffer;
-  PIMAGE_PE_FILE pe;
   PMANUAL_MAPPING_DATA pData;
 
   hProcess = mem_open_process(PROCESS_ALL_ACCESS, FALSE, dwProcessId);
 
-  pe = malloc(sizeof(IMAGE_PE_FILE));
-  SetRawData(dllPath, pe);
+  PIMAGE_PE_FILE pe =(PIMAGE_PE_FILE)malloc(sizeof(IMAGE_PE_FILE));
+  SetRawDataBis(pe_raw_data, size_pe_raw_data, pe);
 
   pRemoteBuffer = MannualMappingDll(hProcess, pe);
   if(pRemoteBuffer == NULL){

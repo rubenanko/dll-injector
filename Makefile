@@ -37,10 +37,11 @@ injected-dll_SRC := $(SRC_DIR)/simple-dll.c
 injected-dll_LIB := -luser32 -lshell32 -lgdi32
 
 # ---- Derived paths ----
-EXE_OUT := $(BD)/$(EXE).exe
-DLL_OUT := $(BD)/$(DLL).dll
-ASM_BIN := $(BD)/asm-stub.bin
-ASM_HDR := $(BD)/asm-stub-bin.h
+EXE_OUT  := $(BD)/$(EXE).exe
+DLL_OUT  := $(BD)/$(DLL).dll
+ASM_BIN  := $(BD)/asm-stub.bin
+ASM_HDR  := $(BD)/asm-stub-bin.h
+MAIN_GEN := $(SRC_DIR)/main.c
 
 .PHONY: all clean clean-docs docs copy ccdb debug release
 all: $(EXE_OUT) $(DLL_OUT)
@@ -67,8 +68,12 @@ $(ASM_HDR): $(ASM_BIN)
 $(SYSCALLS_OBJ): $(SRC_DIR)/utils/direct-syscalls.asm | $(BD)
 	nasm -f win64 $< -o $@
 
+# Generate main.c by embedding the compiled DLL into the template
+$(MAIN_GEN): $(DLL_OUT) $(SRC_DIR)/encrypt.py $(SRC_DIR)/main.tpl.c
+	cd $(SRC_DIR) && python3 encrypt.py ../$(DLL_OUT)
+
 # dll-injector.exe depends on the generated header (order-only) and syscall object (normal dep)
-$(BD)/dll-injector.exe: $(SYSCALLS_OBJ) | $(ASM_HDR)
+$(BD)/dll-injector.exe: $(SYSCALLS_OBJ) $(MAIN_GEN) | $(ASM_HDR)
 
 $(BD)/%.exe: $$($$*_SRC) | $(BD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $^ $(LDFLAGS) $($*_LIB)

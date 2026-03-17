@@ -31,6 +31,21 @@ int SetRawData(const char *fileName, PIMAGE_PE_FILE pe)
 }
 
 /**
+ * @brief Initialise un objet IMAGE_PE_FILE passé par référence sur la base du tableau du bytecode d'un fichier PE encapsulé dans un tableau pe_raw_data de taille size_pe_raw_data
+ *
+ * @param pe_raw_data Pointeur sur le tableau portant le bytecode du fichier PE
+ * @param size_pe_raw_data Taille du tableau pe_raw_data
+ * @param pe Pointeur vers la structure IMAGE_PE_FILE à remplir.
+ */
+void SetRawDataBis(PVOID pe_raw_data, int size_pe_raw_data, PIMAGE_PE_FILE pe)
+{
+
+  pe->RawData = pe_raw_data;
+  pe->SizeOfFile = size_pe_raw_data;
+
+}
+
+/**
  * @brief Vérifie qu'un fichier est une image PE64 (PE32+) valide.
  *
  * Contrôle successivement : la signature DOS (MZ), la signature NT (PE),
