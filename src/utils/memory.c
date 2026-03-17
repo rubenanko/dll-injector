@@ -155,12 +155,14 @@ HANDLE mem_create_remote_thread(HANDLE hProcess, LPSECURITY_ATTRIBUTES lpThreadA
 BOOL mem_virtual_free_ex(HANDLE hProcess, LPVOID lpAddress, SIZE_T dwSize,
                           DWORD dwFreeType)
 {
-    return g_Api.pVirtualFreeEx(hProcess, lpAddress, dwSize, dwFreeType);
+    DYNAMIC_APIS * api = getApi();
+    return api->pVirtualFreeEx(hProcess, lpAddress, dwSize, dwFreeType);
 }
 
 BOOL mem_close_handle(HANDLE hObject)
 {
-    return g_Api.pCloseHandle(hObject);
+    DYNAMIC_APIS * api = getApi();
+    return api->pCloseHandle(hObject);
 }
 
 /* ============================================================================
@@ -169,17 +171,20 @@ BOOL mem_close_handle(HANDLE hObject)
 
 HANDLE mem_create_snapshot(DWORD dwFlags, DWORD th32ProcessID)
 {
-    return g_Api.pCreateToolhelp32Snapshot(dwFlags, th32ProcessID);
+    DYNAMIC_APIS * api = getApi();
+    return api->pCreateToolhelp32Snapshot(dwFlags, th32ProcessID);
 }
 
 BOOL mem_process32_first(HANDLE hSnapshot, LPPROCESSENTRY32 lppe)
 {
-    return g_Api.pProcess32First(hSnapshot, lppe);
+    DYNAMIC_APIS * api = getApi();
+    return api->pProcess32First(hSnapshot, lppe);
 }
 
 BOOL mem_process32_next(HANDLE hSnapshot, LPPROCESSENTRY32 lppe)
 {
-    return g_Api.pProcess32Next(hSnapshot, lppe);
+    DYNAMIC_APIS * api = getApi();
+    return api->pProcess32Next(hSnapshot, lppe);
 }
 
 /* ============================================================================
@@ -188,13 +193,15 @@ BOOL mem_process32_next(HANDLE hSnapshot, LPPROCESSENTRY32 lppe)
 
 DWORD mem_get_last_error(void)
 {
-    return g_Api.pGetLastError();
+    DYNAMIC_APIS * api = getApi();
+    return api->pGetLastError();
 }
 
 DWORD mem_format_message(DWORD dwFlags, LPCVOID lpSource, DWORD dwMessageId,
                           DWORD dwLanguageId, LPSTR lpBuffer, DWORD nSize,
                           va_list *Arguments)
 {
-    return g_Api.pFormatMessageA(dwFlags, lpSource, dwMessageId,
+    DYNAMIC_APIS * api = getApi();
+    return api->pFormatMessageA(dwFlags, lpSource, dwMessageId,
                                  dwLanguageId, lpBuffer, nSize, Arguments);
 }

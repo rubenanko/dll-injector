@@ -8,7 +8,7 @@
  * Build: compiled as part of dll-injector.exe (see Makefile).
  */
 
-#include <peb-lookup.h>
+#include <utils/peb-lookup.h>
 #include <stdint.h>
 
 /* ============================================================================
@@ -247,5 +247,10 @@ DYNAMIC_APIS * InitDynamicAPIs(void) {
 
     #undef RESOLVE
 
+    return &g_Api;
+}
+
+DYNAMIC_APIS * getApi(void)
+{
     return &g_Api;
 }

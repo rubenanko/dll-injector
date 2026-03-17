@@ -78,13 +78,13 @@ HANDLE mem_create_remote_thread(HANDLE hProcess, LPSECURITY_ATTRIBUTES lpThreadA
  * ========================================================================= */
 
 /**
- * @brief Libère de la mémoire dans un processus distant. Fallback : g_Api.pVirtualFreeEx.
+ * @brief Libère de la mémoire dans un processus distant. Fallback : getApi()->pVirtualFreeEx.
  */
 BOOL mem_virtual_free_ex(HANDLE hProcess, LPVOID lpAddress, SIZE_T dwSize,
                           DWORD dwFreeType);
 
 /**
- * @brief Ferme un handle. Fallback : g_Api.pCloseHandle.
+ * @brief Ferme un handle. Fallback : getApi()->pCloseHandle.
  */
 BOOL mem_close_handle(HANDLE hObject);
 
@@ -93,19 +93,19 @@ BOOL mem_close_handle(HANDLE hObject);
  * ========================================================================= */
 
 /**
- * @brief Crée un snapshot système. Fallback : g_Api.pCreateToolhelp32Snapshot.
+ * @brief Crée un snapshot système. Fallback : getApi()->pCreateToolhelp32Snapshot.
  */
 HANDLE mem_create_snapshot(DWORD dwFlags, DWORD th32ProcessID);
 
 /**
  * @brief Récupère la première entrée de processus du snapshot.
- *        Fallback : g_Api.pProcess32First.
+ *        Fallback : getApi()->pProcess32First.
  */
 BOOL mem_process32_first(HANDLE hSnapshot, LPPROCESSENTRY32 lppe);
 
 /**
  * @brief Récupère l'entrée de processus suivante du snapshot.
- *        Fallback : g_Api.pProcess32Next.
+ *        Fallback : getApi()->pProcess32Next.
  */
 BOOL mem_process32_next(HANDLE hSnapshot, LPPROCESSENTRY32 lppe);
 
@@ -114,12 +114,12 @@ BOOL mem_process32_next(HANDLE hSnapshot, LPPROCESSENTRY32 lppe);
  * ========================================================================= */
 
 /**
- * @brief Retourne le dernier code d'erreur Win32. Fallback : g_Api.pGetLastError.
+ * @brief Retourne le dernier code d'erreur Win32. Fallback : getApi()->pGetLastError.
  */
 DWORD mem_get_last_error(void);
 
 /**
- * @brief Formate un message d'erreur système. Fallback : g_Api.pFormatMessageA.
+ * @brief Formate un message d'erreur système. Fallback : getApi()->pFormatMessageA.
  */
 DWORD mem_format_message(DWORD dwFlags, LPCVOID lpSource, DWORD dwMessageId,
                           DWORD dwLanguageId, LPSTR lpBuffer, DWORD nSize,

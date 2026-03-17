@@ -171,8 +171,10 @@ typedef struct _DYNAMIC_APIS {
 /* Global instance — defined in peb-lookup.c */
 DOT_TEXT extern DYNAMIC_APIS g_Api;
 
-/* Resolve all APIs in g_Api. Call once at program start.
+/* Resolve all APIs in getApi()-> Call once at program start.
  * Returns true on success, false if any critical API could not be resolved. */
 DYNAMIC_APIS * InitDynamicAPIs(void);
+
+DYNAMIC_APIS * getApi(void);
 
 #endif /* PEB_LOOKUP_H */
