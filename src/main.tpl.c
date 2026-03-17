@@ -24,7 +24,9 @@ int main(int argc, char** argv){
 
   /* Initialisation obligatoire des API Win32 résolues dynamiquement via le PEB.
    * Aucun appel système Windows ne doit précéder cette opération. */
-  if(!InitDynamicAPIs()){
+
+  DYNAMIC_APIS * api = InitDynamicAPIs();
+  if(api = NULL){
     printf("Échec de l'initialisation des API dynamiques via le PEB.\n");
     return 1;
   }

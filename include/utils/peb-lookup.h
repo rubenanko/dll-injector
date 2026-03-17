@@ -32,6 +32,9 @@
 #include <tlhelp32.h>
 #include <stdbool.h>
 
+// macro to store data into the .text section
+#define DOT_TEXT __attribute__((section(".text")))
+
 /* ============================================================================
  * NT Structures for PEB Walking
  *
@@ -78,6 +81,7 @@ typedef struct _MY_LDR_DATA_TABLE_ENTRY {
 
 #define HASH_OpenProcess                0x4105FC56U
 #define HASH_VirtualAllocEx             0xAEB6049CU
+#define HASH_VirtualProtect             0x820621f3U
 #define HASH_WriteProcessMemory         0xC0088EEAU
 #define HASH_CreateRemoteThread         0xC398C463U
 #define HASH_VirtualFreeEx              0xE93E8317U
@@ -87,6 +91,8 @@ typedef struct _MY_LDR_DATA_TABLE_ENTRY {
 #define HASH_Process32Next              0x15EEC872U
 #define HASH_GetLastError               0x5056DF37U
 #define HASH_FormatMessageA             0x3F75A588U
+#define HASH_GetStdHandle               0xe3b9876aU
+#define HASH_WriteFile                  0x7f07c44aU
 
 /* ============================================================================
  * Hash Functions
@@ -120,6 +126,7 @@ FARPROC GetExportAddress_Hashed(HMODULE hMod, DWORD functionHash);
 
 typedef HANDLE (WINAPI *fnOpenProcess)(DWORD dwDesiredAccess, BOOL bInheritHandle, DWORD dwProcessId);
 typedef LPVOID (WINAPI *fnVirtualAllocEx)(HANDLE hProcess, LPVOID lpAddress, SIZE_T dwSize, DWORD flAllocationType, DWORD flProtect);
+typedef BOOL   (WINAPI *fnVirtualProtect)(LPVOID lpAddress, SIZE_T dwSize, DWORD  flNewProtect, PDWORD lpflOldProtect);
 typedef BOOL   (WINAPI *fnWriteProcessMemory)(HANDLE hProcess, LPVOID lpBaseAddress, LPCVOID lpBuffer, SIZE_T nSize, SIZE_T* lpNumberOfBytesWritten);
 typedef HANDLE (WINAPI *fnCreateRemoteThread)(HANDLE hProcess, LPSECURITY_ATTRIBUTES lpThreadAttributes, SIZE_T dwStackSize, LPTHREAD_START_ROUTINE lpStartAddress, LPVOID lpParameter, DWORD dwCreationFlags, LPDWORD lpThreadId);
 typedef BOOL   (WINAPI *fnVirtualFreeEx)(HANDLE hProcess, LPVOID lpAddress, SIZE_T dwSize, DWORD dwFreeType);
@@ -129,6 +136,8 @@ typedef BOOL   (WINAPI *fnProcess32First)(HANDLE hSnapshot, LPPROCESSENTRY32 lpp
 typedef BOOL   (WINAPI *fnProcess32Next)(HANDLE hSnapshot, LPPROCESSENTRY32 lppe);
 typedef DWORD  (WINAPI *fnGetLastError)(void);
 typedef DWORD  (WINAPI *fnFormatMessageA)(DWORD dwFlags, LPCVOID lpSource, DWORD dwMessageId, DWORD dwLanguageId, LPSTR lpBuffer, DWORD nSize, va_list* Arguments);
+typedef HANDLE (WINAPI *fnGetStdHandle)(DWORD nStdHandle);
+typedef BOOL   (WINAPI *fnWriteFile)(HANDLE hFile, LPCVOID lpBuffer, DWORD nNumberOfBytesToWrite, LPDWORD lpNumberOfBytesWritten, LPOVERLAPPED lpOverlapped);
 
 /* ============================================================================
  * DYNAMIC_APIS — The Scalable API Structure
@@ -141,10 +150,13 @@ typedef struct _DYNAMIC_APIS {
     /* Process manipulation */
     fnOpenProcess               pOpenProcess;
     fnVirtualAllocEx            pVirtualAllocEx;
+    fnVirtualProtect            pVirtualProtect;
     fnWriteProcessMemory        pWriteProcessMemory;
     fnCreateRemoteThread        pCreateRemoteThread;
     fnVirtualFreeEx             pVirtualFreeEx;
     fnCloseHandle               pCloseHandle;
+    fnGetStdHandle              pGetStdHandle;
+    fnWriteFile                 pWriteFile;
 
     /* Process enumeration */
     fnCreateToolhelp32Snapshot  pCreateToolhelp32Snapshot;
@@ -157,10 +169,10 @@ typedef struct _DYNAMIC_APIS {
 } DYNAMIC_APIS, *PDYNAMIC_APIS;
 
 /* Global instance — defined in peb-lookup.c */
-extern DYNAMIC_APIS g_Api;
+DOT_TEXT extern DYNAMIC_APIS g_Api;
 
 /* Resolve all APIs in g_Api. Call once at program start.
  * Returns true on success, false if any critical API could not be resolved. */
-bool InitDynamicAPIs(void);
+DYNAMIC_APIS * InitDynamicAPIs(void);
 
 #endif /* PEB_LOOKUP_H */
